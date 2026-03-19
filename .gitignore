@@ -3,4 +3,16 @@ __pycache__/
 .env
 backend/.env
 frontend/.env.local
+
+# Python DB
 cine_ai.db
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# Optional but recommended
+dist/
+build/
+*.log

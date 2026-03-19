@@ -8,13 +8,19 @@ from app.core.config import settings
 class TMDBService:
     def __init__(self) -> None:
         self.api_key = settings.tmdb_api_key
+        self.bearer_token = settings.tmdb_bearer_token
         self.base_url = settings.tmdb_base_url
 
     def _get(self, path: str, params: dict) -> dict:
-        if not self.api_key:
+        if not self.api_key and not self.bearer_token:
             return {}
-        payload = {"api_key": self.api_key, **params}
-        response = requests.get(f"{self.base_url}{path}", params=payload, timeout=20)
+        headers = {"accept": "application/json"}
+        payload = dict(params)
+        if self.bearer_token:
+            headers["Authorization"] = f"Bearer {self.bearer_token}"
+        elif self.api_key:
+            payload["api_key"] = self.api_key
+        response = requests.get(f"{self.base_url}{path}", params=payload, headers=headers, timeout=20)
         response.raise_for_status()
         return response.json()
 
