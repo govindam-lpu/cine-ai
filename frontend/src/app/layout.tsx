@@ -6,7 +6,8 @@ import PageWrapper from "@/components/layout/PageWrapper";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Cinerex"
+  title: "Cinerex",
+  description: "AI-powered film recommendations built from your actual viewing taste."
 };
 
 type RootLayoutProps = {

@@ -57,6 +57,15 @@ Cinerex ingests a user's public Letterboxd and Serializd profiles, builds a deep
 
 ---
 
+## Local Development
+
+- Frontend only from the repo root: `npm run dev`
+- Frontend directly: `cd frontend && npm run dev`
+- Frontend production build: `npm run build`
+- Docker Compose: `docker compose up --build` now starts both backend on port 8000 and frontend on port 3000
+
+> Note: the frontend is now wired to the backend endpoints that exist today (`/health`, `/users`, `/scrape/letterboxd`, `/scrape/status/:job_id`). Recommendation, watchlist, compatibility, and twin pages are fully built in the UI and clearly mark which backend endpoints are still pending.
+
 ## How to Use This Folder
 
 Point your AI coding agent (Copilot, Cursor, Claude Code, etc.) at this entire folder or repo. Say:
