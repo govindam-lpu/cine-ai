@@ -1,3 +1,51 @@
+"use client";
+
+import EmptyState from "@/components/shared/EmptyState";
+import GenreBreakdown from "@/components/taste/GenreBreakdown";
+import CrewAffinities from "@/components/taste/CrewAffinities";
+import PretensionScore from "@/components/taste/PretensionScore";
+import TasteDNACard from "@/components/taste/TasteDNACard";
+import TasteTimeline from "@/components/taste/TasteTimeline";
+import ToneRadarChart from "@/components/taste/ToneRadarChart";
+import { useTasteProfile } from "@/hooks/useTasteProfile";
+import { useUser } from "@/hooks/useUser";
+
 export default function TastePage() {
-  return <div className="min-h-screen bg-bg-base" />;
+  const { user } = useUser();
+  const taste = useTasteProfile(user);
+
+  if (!user) {
+    return <div className="page-shell"><EmptyState actionHref="/" actionLabel="Start onboarding" description="Link a Letterboxd profile first so Cinerex has something to analyze." title="No Taste DNA yet" /></div>;
+  }
+
+  return (
+    <div className="page-shell space-y-8">
+      <header className="space-y-3">
+        <p className="text-xs uppercase tracking-[0.22em] text-text-muted">Taste DNA</p>
+        <h1 className="font-display text-5xl text-text-primary">The full profile view</h1>
+        <p className="max-w-4xl text-sm text-text-secondary">This page is ready for the future `/profile/:user_id` payload, but today it uses your real backend user data plus a derived fallback profile so the UI is complete and useful now.</p>
+      </header>
+      <TasteDNACard taste={taste} user={user} />
+      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <ToneRadarChart tone={taste.tone_profile} />
+        <PretensionScore value={taste.pretension_score} />
+      </div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <GenreBreakdown items={taste.top_genres} title="Genre breakdown" />
+        <GenreBreakdown items={taste.preferred_eras} title="Preferred eras" />
+      </div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <CrewAffinities names={taste.crew_affinities} />
+        <section className="panel space-y-4 p-6">
+          <h3 className="font-display text-2xl text-text-primary">Invisible preferences</h3>
+          <div className="space-y-3">
+            {taste.invisible_preferences.map((item) => (
+              <div key={item} className="border border-border-default p-4 text-sm text-text-secondary">{item}</div>
+            ))}
+          </div>
+        </section>
+      </div>
+      <TasteTimeline items={taste.timeline} />
+    </div>
+  );
 }
