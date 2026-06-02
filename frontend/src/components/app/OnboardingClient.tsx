@@ -16,7 +16,7 @@ import type { CreateUserInput, ScrapeJob } from "@/types/user";
 export default function OnboardingClient({ initialUsername }: { initialUsername?: string }) {
   const { user, refresh } = useUser();
   const { setUser, setUserId, activeJob, setActiveJob } = useUserStore();
-  const taste = useTasteProfile(user);
+  const { taste, loading: tasteLoading, error: tasteError } = useTasteProfile(user);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,9 +73,9 @@ export default function OnboardingClient({ initialUsername }: { initialUsername?
   return (
     <div className="page-shell space-y-8">
       <header className="space-y-3">
-        <p className="text-xs uppercase tracking-[0.22em] text-text-muted">Onboarding</p>
-        <h1 className="font-display text-5xl text-text-primary">Build your profile</h1>
-        <p className="max-w-3xl text-sm text-text-secondary">This flow is now fully wired to the working backend endpoints: create user, start Letterboxd scrape, poll scrape status, then land in the main product shell.</p>
+        <p className="eyebrow">Onboarding</p>
+        <h1 className="font-display text-5xl text-text-primary md:text-6xl">Build your profile</h1>
+        <p className="max-w-3xl text-base text-text-secondary">Connect a public Letterboxd profile, import recent viewing history, and step into the recommendation workspace.</p>
       </header>
 
       {error ? <ErrorState message={error} /> : null}
@@ -83,11 +83,13 @@ export default function OnboardingClient({ initialUsername }: { initialUsername?
       {step === 1 ? <UsernameInput initialUsername={initialUsername} loading={submitting} onSubmit={handleSubmit} /> : null}
       {step === 2 ? (
         <div className="space-y-4">
-          {submitting ? <LoadingSpinner label="Submitting your profile…" /> : null}
+          {submitting ? <LoadingSpinner label="Submitting your profile..." /> : null}
           <LoadingTypewriter job={activeJob} />
         </div>
       ) : null}
-      {step === 3 ? <DNAReveal taste={taste} user={user} /> : null}
+      {step === 3 && tasteLoading ? <LoadingSpinner label="Loading taste profile..." /> : null}
+      {step === 3 && tasteError ? <ErrorState message={tasteError} title="Taste profile unavailable" /> : null}
+      {step === 3 && taste ? <DNAReveal taste={taste} user={user} /> : null}
     </div>
   );
 }

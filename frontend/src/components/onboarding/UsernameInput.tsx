@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ArrowRight } from "lucide-react";
 
 import type { CreateUserInput, PreferredFormat } from "@/types/user";
 
@@ -18,7 +19,7 @@ export default function UsernameInput({ initialUsername = "", loading = false, o
 
   return (
     <form
-      className="panel grid gap-5 p-6 md:grid-cols-2"
+      className="panel grid gap-5 p-6 md:grid-cols-2 md:p-8"
       onSubmit={async (event) => {
         event.preventDefault();
         await onSubmit({
@@ -30,16 +31,16 @@ export default function UsernameInput({ initialUsername = "", loading = false, o
       }}
     >
       <div className="space-y-2 md:col-span-2">
-        <p className="text-xs uppercase tracking-[0.2em] text-text-muted">Step 1 · Connect</p>
-        <h2 className="font-display text-3xl text-text-primary">Start with your Letterboxd username</h2>
-        <p className="max-w-2xl text-sm text-text-secondary">This is the only required input for the current backend. Serializd is optional and remains Phase 2 in the API.</p>
+        <p className="eyebrow">Step 1 / Connect</p>
+        <h2 className="font-display text-4xl text-text-primary">Start with your public profile</h2>
+        <p className="max-w-2xl text-sm text-text-secondary">Letterboxd is enough for the current MVP. Serializd can be saved for the TV phase.</p>
       </div>
       <label className="space-y-2 md:col-span-2">
         <span className="text-xs uppercase tracking-[0.18em] text-text-muted">Letterboxd</span>
         <input className="input-base" onChange={(event) => setLetterboxd(event.target.value)} placeholder="e.g. karstenrunquist" required value={letterboxd} />
       </label>
       <label className="space-y-2">
-        <span className="text-xs uppercase tracking-[0.18em] text-text-muted">Serializd (optional)</span>
+        <span className="text-xs uppercase tracking-[0.18em] text-text-muted">Serializd optional</span>
         <input className="input-base" onChange={(event) => setSerializd(event.target.value)} placeholder="Optional for now" value={serializd} />
       </label>
       <label className="space-y-2">
@@ -50,15 +51,16 @@ export default function UsernameInput({ initialUsername = "", loading = false, o
         <legend className="text-xs uppercase tracking-[0.18em] text-text-muted">Preferred format</legend>
         <div className="grid gap-2 sm:grid-cols-3">
           {(["films", "shows", "both"] as const).map((option) => (
-            <label key={option} className={`border px-3 py-3 text-sm uppercase tracking-[0.12em] ${preferredFormat === option ? "border-accent text-text-primary" : "border-border-default text-text-secondary"}`}>
+            <label key={option} className={`rounded-[6px] border px-3 py-3 text-center text-sm uppercase tracking-[0.12em] ${preferredFormat === option ? "border-accent bg-[rgba(243,201,79,0.08)] text-text-primary" : "border-border-default text-text-secondary"}`}>
               <input checked={preferredFormat === option} className="sr-only" name="preferred_format" onChange={() => setPreferredFormat(option)} type="radio" />
               {option}
             </label>
           ))}
         </div>
       </fieldset>
-      <button className="button-primary w-fit" disabled={loading} type="submit">
-        {loading ? "Connecting…" : "Build my profile"}
+      <button className="button-primary w-fit gap-2" disabled={loading} type="submit">
+        {loading ? "Connecting..." : "Build my profile"}
+        <ArrowRight size={16} />
       </button>
     </form>
   );

@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.health import router as health_router
+from app.api.profile import router as profile_router
+from app.api.recommendations import router as recommendations_router
 from app.api.scrape import router as scrape_router
 from app.api.users import router as users_router
 from app.db.init_db import init_db
@@ -38,3 +40,5 @@ async def generic_exception_handler(_, exc: Exception):
 app.include_router(health_router)
 app.include_router(users_router)
 app.include_router(scrape_router)
+app.include_router(profile_router)
+app.include_router(recommendations_router)

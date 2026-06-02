@@ -1,3 +1,3 @@
-from app.api import health, scrape, users
+from app.api import health, profile, recommendations, scrape, users
 
-__all__ = ["health", "users", "scrape"]
+__all__ = ["health", "users", "scrape", "profile", "recommendations"]

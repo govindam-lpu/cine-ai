@@ -1,3 +1,5 @@
+import { SlidersHorizontal } from "lucide-react";
+
 import type { UserProfile } from "@/types/user";
 
 type FilterSidebarProps = {
@@ -13,9 +15,14 @@ export default function FilterSidebar({ user, mood, setMood }: FilterSidebarProp
 
   return (
     <aside className="panel space-y-6 p-5">
-      <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-text-muted">Filter</p>
-        <h2 className="mt-2 font-display text-2xl text-text-primary">Recommendation lens</h2>
+      <div className="flex items-center gap-3">
+        <span className="flex h-10 w-10 items-center justify-center rounded-[6px] border border-border-default text-cyan">
+          <SlidersHorizontal size={18} />
+        </span>
+        <div>
+          <p className="eyebrow">Lens</p>
+          <h2 className="font-display text-2xl text-text-primary">Tune the slate</h2>
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -24,7 +31,7 @@ export default function FilterSidebar({ user, mood, setMood }: FilterSidebarProp
           {(["films", "shows", "both"] as const).map((format) => (
             <div
               key={format}
-              className={`border px-3 py-2 text-center ${user?.preferred_format === format ? "border-accent text-text-primary" : "border-border-default text-text-secondary"}`}
+              className={`rounded-[6px] border px-3 py-2 text-center ${user?.preferred_format === format ? "border-accent bg-[rgba(243,201,79,0.08)] text-text-primary" : "border-border-default text-text-secondary"}`}
             >
               {format}
             </div>
@@ -34,8 +41,8 @@ export default function FilterSidebar({ user, mood, setMood }: FilterSidebarProp
 
       <div className="space-y-3">
         <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Mood</p>
-        <button className="w-full border border-border-default px-3 py-2 text-left text-sm text-text-secondary" onClick={() => setMood(mood ? "" : "Want to Think")} type="button">
-          {mood || "Choose a visible mood chip above"}
+        <button className="w-full rounded-[6px] border border-border-default bg-[rgba(245,241,234,0.03)] px-3 py-2 text-left text-sm text-text-secondary" onClick={() => setMood(mood ? "" : "Want to Think")} type="button">
+          {mood || "No mood selected"}
         </button>
       </div>
 
@@ -43,13 +50,9 @@ export default function FilterSidebar({ user, mood, setMood }: FilterSidebarProp
         <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Streaming</p>
         <div className="flex flex-wrap gap-2">
           {chips.map((chip) => (
-            <span key={chip} className="border border-border-default px-2 py-1 text-xs text-text-secondary">{chip}</span>
+            <span key={chip} className="rounded-[999px] border border-border-default bg-[rgba(245,241,234,0.03)] px-3 py-1 text-xs text-text-secondary">{chip}</span>
           ))}
         </div>
-      </div>
-
-      <div className="space-y-2 border-t border-border-default pt-4 text-sm text-text-secondary">
-        <p>Because the backend recommendation endpoint is not shipped yet, these controls currently shape the UI state rather than live server results.</p>
       </div>
     </aside>
   );

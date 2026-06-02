@@ -2,24 +2,29 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Compass, Dna, HeartHandshake, Settings } from "lucide-react";
 
 const nav = [
-  { href: "/recommendations", label: "Home" },
-  { href: "/taste", label: "Taste" },
-  { href: "/compatibility", label: "Match" },
-  { href: "/settings", label: "Profile" }
+  { href: "/recommendations", label: "Home", icon: Compass },
+  { href: "/taste", label: "Taste", icon: Dna },
+  { href: "/compatibility", label: "Match", icon: HeartHandshake },
+  { href: "/settings", label: "Profile", icon: Settings }
 ];
 
 export default function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 grid grid-cols-4 border-t border-border-default bg-[rgba(20,18,16,0.96)] lg:hidden">
-      {nav.map((item) => (
-        <Link key={item.href} className={`px-3 py-4 text-center text-[11px] uppercase tracking-[0.16em] ${pathname === item.href ? "text-accent" : "text-text-secondary"}`} href={item.href}>
-          {item.label}
-        </Link>
-      ))}
+    <nav className="fixed bottom-0 left-0 right-0 z-40 grid grid-cols-4 border-t border-border-default bg-[rgba(7,9,12,0.96)] backdrop-blur-xl lg:hidden">
+      {nav.map((item) => {
+        const Icon = item.icon;
+        return (
+          <Link key={item.href} className={`flex flex-col items-center gap-1 px-3 py-3 text-center text-[10px] uppercase tracking-[0.14em] ${pathname === item.href ? "text-accent" : "text-text-secondary"}`} href={item.href}>
+            <Icon size={17} />
+            {item.label}
+          </Link>
+        );
+      })}
     </nav>
   );
 }

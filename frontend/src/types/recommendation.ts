@@ -17,3 +17,15 @@ export type AntiRecommendation = {
   reason: string;
   confidence: RecommendationConfidence;
 };
+
+export type RecommendationPayload = {
+  recommendations: Recommendation[];
+  wild_card: Recommendation | null;
+  anti_recommendations: AntiRecommendation[];
+  generated_at: string;
+  basis?: {
+    films_analyzed: number;
+    top_genres: Array<{ genre: string; count: number; avg_rating?: number | null }>;
+    mood?: string | null;
+  };
+};

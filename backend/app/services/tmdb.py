@@ -40,6 +40,12 @@ class TMDBService:
     def movie_details(self, tmdb_id: int) -> dict:
         return self._get(f"/movie/{tmdb_id}", {})
 
+    def movie_credits(self, tmdb_id: int) -> dict:
+        return self._get(f"/movie/{tmdb_id}/credits", {})
+
+    def discover_movies(self, params: dict) -> dict:
+        return self._get("/discover/movie", params)
+
     @staticmethod
     def _pick_best(results: list[dict], title: str, year: int | None) -> dict | None:
         for result in results[:5]:

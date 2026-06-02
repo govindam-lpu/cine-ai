@@ -13,6 +13,8 @@ module.exports = {
         "text-muted": "var(--text-muted)",
         accent: "var(--accent)",
         "accent-dim": "var(--accent-dim)",
+        cyan: "var(--cyan)",
+        rose: "var(--rose)",
         positive: "var(--positive)",
         warning: "var(--warning)",
         negative: "var(--negative)",

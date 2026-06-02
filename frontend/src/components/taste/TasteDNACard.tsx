@@ -3,30 +3,32 @@ import type { UserProfile } from "@/types/user";
 
 export default function TasteDNACard({ user, taste }: { user: UserProfile | null; taste: DerivedTasteProfile }) {
   return (
-    <section className="panel space-y-6 border-border-accent bg-[linear-gradient(145deg,rgba(232,197,71,0.08),rgba(20,18,16,0.92))] p-6 md:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border-accent pb-4">
-        <p className="font-display text-lg uppercase tracking-[0.28em] text-text-primary">Cinerex Taste DNA</p>
-        <p className="text-sm text-text-secondary">@{user?.letterboxd_username ?? "guest"}</p>
+    <section className="panel overflow-hidden border-border-accent p-0">
+      <div className="border-b border-border-accent bg-[rgba(243,201,79,0.07)] p-5 md:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="eyebrow">Taste DNA</p>
+            <h2 className="mt-2 font-display text-3xl text-text-primary">@{user?.letterboxd_username ?? "guest"}</h2>
+          </div>
+          <span className="rounded-[999px] border border-border-accent px-3 py-1 text-xs uppercase tracking-[0.14em] text-accent">
+            {taste.backendReady ? "Live profile" : "Preview mode"}
+          </span>
+        </div>
       </div>
-      <blockquote className="max-w-3xl font-display text-3xl italic leading-relaxed text-text-primary">
-        “{taste.summary}”
-      </blockquote>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Top genres</p>
-          <p className="mt-2 text-sm text-text-secondary">{taste.top_genres.map((item) => item.genre).join(" · ")}</p>
-        </div>
-        <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Favorite era</p>
-          <p className="mt-2 text-sm text-text-secondary">{taste.preferred_eras[0]?.genre}</p>
-        </div>
-        <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Pretension score</p>
-          <p className="mt-2 text-sm text-text-secondary">{Math.round(taste.pretension_score * 100)}%</p>
-        </div>
-        <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Backend readiness</p>
-          <p className="mt-2 text-sm text-text-secondary">{taste.backendReady ? "Taste endpoint live" : "Derived fallback mode"}</p>
+      <div className="space-y-6 p-5 md:p-6">
+        <p className="max-w-3xl text-lg leading-8 text-text-primary">{taste.summary}</p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            ["Top genres", taste.top_genres.map((item) => item.genre).join(" / ")],
+            ["Favorite era", taste.preferred_eras[0]?.genre ?? "Learning"],
+            ["Pretension score", `${Math.round(taste.pretension_score * 100)}%`],
+            ["Readiness", taste.backendReady ? "Taste endpoint live" : "Derived fallback"]
+          ].map(([label, value]) => (
+            <div key={label} className="stat-card">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-text-muted">{label}</p>
+              <p className="mt-2 text-sm text-text-secondary">{value}</p>
+            </div>
+          ))}
         </div>
       </div>
     </section>

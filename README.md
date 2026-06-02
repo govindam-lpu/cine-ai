@@ -9,7 +9,7 @@ This folder contains the complete specification for building Cinerex — an AI-p
 Cinerex ingests a user's public Letterboxd and Serializd profiles, builds a deep psychological taste profile using AI, and delivers hyper-personalized film and TV recommendations with human-readable reasoning. It recommends based on *who the user is as a viewer* — not just what they've watched.
 
 **App Name:** Cinerex
-**Status:** Pre-build. All specs complete.
+**Status:** Active MVP build. Specs are complete; frontend shell, user creation, Letterboxd sync, and local SQLite persistence are implemented.
 **Monetization:** Free at launch. Freemium model to be introduced later.
 **Auth:** Users connect via public Letterboxd/Serializd username only. No credentials stored.
 **Social:** Private. No public user profiles on the platform.
@@ -64,7 +64,7 @@ Cinerex ingests a user's public Letterboxd and Serializd profiles, builds a deep
 - Frontend production build: `npm run build`
 - Docker Compose: `docker compose up --build` now starts both backend on port 8000 and frontend on port 3000
 
-> Note: the frontend is now wired to the backend endpoints that exist today (`/health`, `/users`, `/scrape/letterboxd`, `/scrape/status/:job_id`). Recommendation, watchlist, compatibility, and twin pages are fully built in the UI and clearly mark which backend endpoints are still pending.
+> Note: the frontend is now wired to the working backend endpoints for health, users, Letterboxd sync, real Taste DNA generation, and real TMDB-backed recommendations. Watchlist, compatibility, and twin pages are still UI shells waiting on backend endpoints.
 
 ## How to Use This Folder
 

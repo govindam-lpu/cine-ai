@@ -1,4 +1,6 @@
 import type { CreatedUser, CreateUserInput, HealthPayload, ScrapeJob, UserProfile } from "@/types/user";
+import type { DerivedTasteProfile } from "@/types/taste";
+import type { RecommendationPayload } from "@/types/recommendation";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
@@ -73,5 +75,17 @@ export const scrapeApi = {
       progress: data.progress,
       error: data.error
     };
+  }
+};
+
+export const profileApi = {
+  get: (userId: string) => request<DerivedTasteProfile>(`/profile/${userId}`)
+};
+
+export const recommendationsApi = {
+  get: (userId: string, mood?: string) => {
+    const params = new URLSearchParams({ limit: "8" });
+    if (mood) params.set("mood", mood);
+    return request<RecommendationPayload>(`/recommendations/${userId}?${params.toString()}`);
   }
 };

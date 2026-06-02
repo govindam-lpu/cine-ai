@@ -3,7 +3,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.models.entities import Film, LetterboxdTmdbCache, ScrapeJob, User, WatchHistory
+from app.models.entities import Film, LetterboxdProfile, LetterboxdTmdbCache, ScrapeJob, User, WatchHistory
 from app.scrapers.letterboxd import LetterboxdScraper, ScrapeError
 from app.services.tmdb import TMDBService
 
@@ -28,13 +28,15 @@ class SyncService:
             db.commit()
 
             scraped = self.scraper.scrape_films(username=username, mode=mode)
+            if not scraped:
+                raise ScrapeError("NO_FILMS_FOUND", "No public Letterboxd films were found")
             job.films_total = len(scraped)
             job.status = "enriching"
             job.step = "Enriching TMDB metadata"
             db.commit()
 
             for idx, film_entry in enumerate(scraped, start=1):
-                film_row = self._get_or_create_film(db, film_entry.letterboxd_slug, film_entry.title, film_entry.year)
+                film_row = self._get_or_create_film(db, film_entry.letterboxd_slug, film_entry.title, film_entry.year, film_entry.tmdb_id)
                 if film_row:
                     existing = (
                         db.query(WatchHistory)
@@ -52,13 +54,23 @@ class SyncService:
                                 is_rewatch=film_entry.is_rewatch,
                             )
                         )
+                    else:
+                        existing.user_rating = film_entry.user_rating if film_entry.user_rating is not None else existing.user_rating
+                        existing.watched_at = film_entry.watched_at.date() if film_entry.watched_at else existing.watched_at
+                        existing.is_rewatch = existing.is_rewatch or film_entry.is_rewatch
                 job.films_processed = idx
+                job.updated_at = datetime.utcnow()
                 db.commit()
 
             user = db.get(User, user_id)
             user.sync_status = "complete"
             user.last_synced_at = datetime.utcnow()
             user.sync_error = None
+            profile = db.query(LetterboxdProfile).filter_by(user_id=user_id).first()
+            if profile:
+                profile.total_films = len(scraped)
+                profile.last_scraped_at = datetime.utcnow()
+                profile.updated_at = datetime.utcnow()
 
             job.status = "complete"
             job.step = "Done"
@@ -73,18 +85,35 @@ class SyncService:
             db.commit()
         except Exception as exc:  # noqa: BLE001
             self._set_job_error(db, job_id, "SCRAPE_FAILED", str(exc))
+            user = db.get(User, user_id)
+            if user:
+                user.sync_status = "error"
+                user.sync_error = str(exc)
+                db.commit()
         finally:
             LETTERBOXD_SYNC_LOCK.release()
 
-    def _get_or_create_film(self, db: Session, slug: str, title: str, year: int | None) -> Film | None:
+    def _get_or_create_film(self, db: Session, slug: str, title: str, year: int | None, known_tmdb_id: int | None = None) -> Film | None:
         cached = db.query(LetterboxdTmdbCache).filter_by(letterboxd_slug=slug).first()
         tmdb_id = None
-        if cached and cached.matched:
+        if known_tmdb_id:
+            tmdb_id = known_tmdb_id
+            if not cached:
+                db.add(LetterboxdTmdbCache(letterboxd_slug=slug, title=title, release_year=year, tmdb_id=tmdb_id, matched=True))
+                db.commit()
+            elif not cached.matched or cached.tmdb_id != tmdb_id:
+                cached.tmdb_id = tmdb_id
+                cached.matched = True
+                db.commit()
+        elif cached and cached.matched:
             tmdb_id = cached.tmdb_id
         elif cached and not cached.matched:
             return None
         else:
-            result = self.tmdb.search_movie_match(title=title, year=year)
+            try:
+                result = self.tmdb.search_movie_match(title=title, year=year)
+            except Exception:  # noqa: BLE001
+                result = None
             if not result:
                 db.add(LetterboxdTmdbCache(letterboxd_slug=slug, title=title, release_year=year, matched=False))
                 db.commit()
@@ -97,7 +126,10 @@ class SyncService:
         if film:
             return film
 
-        details = self.tmdb.movie_details(tmdb_id)
+        try:
+            details = self.tmdb.movie_details(tmdb_id)
+        except Exception:  # noqa: BLE001
+            details = {}
         film = Film(
             tmdb_id=tmdb_id,
             media_type="film",
