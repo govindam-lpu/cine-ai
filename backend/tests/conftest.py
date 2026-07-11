@@ -8,6 +8,10 @@ pytest before test modules, so setting the env var here is early enough.
 import os
 
 os.environ["DATABASE_URL"] = "sqlite:///./test_cinerex.db"
+# Hermetic tests: blank TMDB keys (present env vars override the repo .env) so no test ever
+# reaches the live API. Tests that need matches inject a FakeTMDB explicitly.
+os.environ["TMDB_API_KEY"] = ""
+os.environ["TMDB_BEARER_TOKEN"] = ""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,13 +26,22 @@ def client():
         yield c
 
 
+@pytest.fixture(autouse=True)
+def _fresh_tables():
+    """Recreate all tables around each test so rows never leak between tests."""
+    from app.db.session import Base, engine
+
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
 @pytest.fixture(autouse=True, scope="session")
 def _cleanup_test_db():
     yield
-    # Dispose the engine first: on Windows an open SQLite handle blocks file removal.
     from app.db.session import engine
 
-    engine.dispose()
+    engine.dispose()  # release the SQLite handle so Windows lets us delete the file
     try:
         os.remove("./test_cinerex.db")
     except (FileNotFoundError, PermissionError):

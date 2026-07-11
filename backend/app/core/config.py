@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "llama3.2:3b-instruct-q4_K_M"
 
+    # --- Ingestion ---
+    # The scraper works only from a residential IP (Cloudflare 403s datacenters), so the
+    # POST /sync scrape path is a local-dev convenience. Set False on the deployed Space.
+    allow_scrape_sync: bool = True
+
     # --- CORS ---
     # Comma-separated list of frontend origins allowed to call the API.
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"

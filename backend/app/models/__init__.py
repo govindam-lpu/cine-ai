@@ -1,6 +1,14 @@
 """SQLAlchemy models package.
 
-Empty in Phase 0. Phase 1 adds Profile, Film, WatchHistory, TasteProfile, IngestJob, and
-LetterboxdTmdbCache here; importing this package is what registers them on Base.metadata
-for `init_db`.
+Importing `entities` registers every model on `Base.metadata` so `init_db.create_all`
+creates their tables on startup.
 """
+
+from app.models.entities import (  # noqa: F401
+    Film,
+    IngestJob,
+    LetterboxdTmdbCache,
+    Profile,
+    TasteProfile,
+    WatchHistory,
+)

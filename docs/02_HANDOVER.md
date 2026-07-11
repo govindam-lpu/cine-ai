@@ -14,7 +14,14 @@ The state of the world for whoever (a fresh session, or you) picks this up. Pair
   cherry-pick from the archive, because the requirements changed.
 - **Phase 0 is done (2026-07-11).** Fresh `backend/` (FastAPI) and `frontend/` (Next.js 14) boot;
   `GET /health` returns `{status, version}`; `pytest` (4) and `vitest` (3) + `tsc --noEmit` are green;
-  the production `next build` compiles. `.venv` was recreated (the old one had no pip). Phase 1 next.
+  the production `next build` compiles. `.venv` was recreated (the old one had no pip).
+- **Phase 1 is done (2026-07-11).** v1 data model (Profile/Film/WatchHistory/TasteProfile/IngestJob/
+  LetterboxdTmdbCache); `ingest.py` parses the export ZIP/CSV (dedupe across ratings/diary/watched/
+  reviews, BOM/quoted-comma/non-Latin/missing-year handling, friendly IngestError codes); `enrich.py`
+  resolves films via TMDB (cache-first, one `append_to_response=credits,keywords` call, crew+keyword
+  capture) behind an async job with progress; `POST /api/profiles/upload`, the job-progress endpoint,
+  and the local-dev `POST /api/profiles/{handle}/sync` scrape. **44 pytest pass**; verified live
+  against real TMDB (7/7 fixture films matched, crew/keywords/genres correct). Phase 2 (evidence) next.
 
 Repo root today:
 
@@ -119,7 +126,7 @@ Mark a phase done only when its Definition of Done in `01_BUILD_PHASES.md` holds
 pass. Commit at each boundary.
 
 - [x] **Phase 0** — Scaffold & harness (both apps boot, `/health`, tests run) — done 2026-07-11
-- [ ] **Phase 1** — Data model + ingestion (upload real export → enriched films stored)
+- [x] **Phase 1** — Data model + ingestion (upload real export → enriched films stored) — done 2026-07-11
 - [ ] **Phase 2** — Evidence layer (statistics + min-profile gate)
 - [ ] **Phase 3** — Ranker (top-8, watched excluded, held-out eval beats random)
 - [ ] **Phase 4** — Writer (Ollama + Groq behind one protocol, fallback works)
