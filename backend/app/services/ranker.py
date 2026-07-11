@@ -359,6 +359,24 @@ def recommend(
         film = svc.get_or_create_by_tmdb_id(db, tid)
         if film:
             candidate_films.append(film)
+
+    # Resilience: if discovery came back thin (niche taste, or TMDB unavailable), supplement from
+    # already-enriched, unwatched films in the cache rather than returning fewer than asked.
+    if len(candidate_films) < limit:
+        have = {f.tmdb_id for f in candidate_films}
+        cached = (
+            db.query(Film)
+            .filter(Film.embedding.isnot(None))
+            .limit(candidate_pool * 3)
+            .all()
+        )
+        for film in cached:
+            if film.tmdb_id and film.tmdb_id not in watched_ids and film.tmdb_id not in have:
+                candidate_films.append(film)
+                have.add(film.tmdb_id)
+        if candidate_ids and len(candidate_films) > len(candidate_ids):
+            logger.info("ranker: supplemented discovery with %d cached films", len(candidate_films) - len(candidate_ids))
+
     ensure_film_embeddings(db, candidate_films)
 
     vectors = [film_to_vector(f) for f in candidate_films if f.tmdb_id not in watched_ids]

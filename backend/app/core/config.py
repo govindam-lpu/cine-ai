@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     # POST /sync scrape path is a local-dev convenience. Set False on the deployed Space.
     allow_scrape_sync: bool = True
 
+    # --- Test support ---
+    # E2E_MODE=1 forces TMDB offline (used by the Playwright e2e so discovery falls back to the
+    # seeded film cache — deterministic, no network). Never set in production.
+    e2e_mode: bool = False
+
     # --- CORS ---
     # Comma-separated list of frontend origins allowed to call the API.
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"

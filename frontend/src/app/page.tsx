@@ -1,19 +1,23 @@
-import { cn } from "@/lib/cn";
+import UploadDoor from "@/components/UploadDoor";
 
-// Phase 0 placeholder. The real "door" screen — upload control + optional handle — is Phase 6.
-// Kept deliberately plain and dependency-light so it renders in tests and proves the harness.
+// The door: one upload control + optional handle. No feature-card scaffolding, no "coming soon".
 export default function Home() {
   return (
-    <main className={cn("mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-6")}>
-      <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Cinerex</p>
-      <h1 className="mt-4 font-display text-5xl leading-none">
-        A taste-based film recommender.
-      </h1>
-      <p className="mt-6 max-w-prose text-text-secondary">
-        Upload your Letterboxd export and get a taste profile plus eight recommendations, each
-        with a real reason. No account, no scraping.
+    <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-10 px-6 py-16">
+      <div className="space-y-5">
+        <p className="eyebrow">Taste-based film recommendations</p>
+        <h1 className="font-display text-5xl leading-[0.95] text-text-primary md:text-6xl">Cinerex</h1>
+        <p className="max-w-xl text-lg leading-8 text-text-secondary">
+          Upload your Letterboxd export. Get a statistical portrait of yourself as a viewer and eight
+          films with a real, specific reason attached to each. No account, no scraping.
+        </p>
+      </div>
+
+      <UploadDoor />
+
+      <p className="font-mono text-xs text-text-muted">
+        Your watch history stays on Letterboxd. We read the export you hand us and nothing else.
       </p>
-      <p className="mt-8 font-mono text-xs text-text-muted">Scaffold running — Phase 0.</p>
     </main>
   );
 }

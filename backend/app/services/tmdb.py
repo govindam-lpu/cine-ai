@@ -21,6 +21,8 @@ class TMDBService:
 
     @property
     def configured(self) -> bool:
+        if settings.e2e_mode:
+            return False  # e2e runs offline → discovery falls back to the seeded film cache
         return bool(self.api_key or self.bearer_token)
 
     def _get(self, path: str, params: dict) -> dict:

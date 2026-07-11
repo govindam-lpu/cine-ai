@@ -61,7 +61,17 @@ The state of the world for whoever (a fresh session, or you) picks this up. Pair
   **92 pytest pass** incl. a full upload→profile→8-recs e2e (TMDB + writer stubbed), rate-limit 429s,
   and the capacity path (templates + at_capacity flag, never a 500). NOTE: the app degrades to
   template prose when no LLM is reachable, so the whole journey works locally without Ollama/Groq —
-  which is what lets Phase 6's e2e run against a seeded backend. Phase 6 (frontend) next.
+  which is what lets Phase 6's e2e run against a seeded backend.
+- **Phase 6 is done (2026-07-11).** Two screens: `/` (the door — drag-drop upload + optional handle)
+  and `/u/{handle}` (the product — `ProfileClient` polls the profile, renders the Taste DNA card
+  prose-first with a signal radar / genre bars / crew / interpreted stats, then streams the eight
+  recommendations over SSE where the reason IS the card; inline mood filter, re-roll, share-URL).
+  Typed API client (`lib/api.ts`) incl. an SSE reader. No client persistence (handle in URL, data on
+  server). **8 vitest** component tests + `tsc` clean + production `next build` compiles; **Playwright
+  e2e (2)** drives the full journey against a seeded offline backend (`scripts/seed_e2e.py`,
+  `E2E_MODE=1` forces TMDB offline → cache-fallback recs, template prose). Added along the way:
+  ranker cache-fallback when discovery is thin, `_insert_film` IntegrityError resilience (concurrent
+  recs), fast-fail Ollama connect timeout. Phase 7 (design) next; Phase 4 live-Groq still pending key.
 
 Repo root today:
 
@@ -172,7 +182,7 @@ pass. Commit at each boundary.
 - [~] **Phase 4** — Writer (Ollama + Groq behind one protocol, fallback works) — CODE COMPLETE +
   82 tests 2026-07-11; **live LLM verification pending a GROQ_API_KEY or local Ollama** (see note)
 - [x] **Phase 5** — API + orchestration + guardrails (e2e upload→recs; rate/capacity states) — done 2026-07-11
-- [ ] **Phase 6** — Frontend (two screens, full journey, e2e passes)
+- [x] **Phase 6** — Frontend (two screens, full journey, e2e passes) — done 2026-07-11
 - [ ] **Phase 7** — Design pass (cohesive across states/viewports)
 - [ ] **Phase 8** — Deploy (Vercel + HF Space + Turso + Groq; live, free, working)
 

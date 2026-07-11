@@ -166,6 +166,8 @@ class _LLMWriter:
         raise NotImplementedError
 
     def _generate(self, system: str, user: str, model_cls, key: str, max_tokens: int) -> str | None:
+        if settings.e2e_mode:
+            return None  # offline e2e → straight to the template, no network round-trip
         for _ in range(2):  # initial attempt + one retry
             try:
                 raw = self._complete(system, user, max_tokens)
@@ -236,7 +238,7 @@ class OllamaWriter(_LLMWriter):
                     "stream": False,
                     "options": {"temperature": self.temperature, "num_predict": max_tokens},
                 },
-                timeout=120,
+                timeout=(3, 120),  # fail fast (3s) if Ollama isn't up; allow 120s for generation
             )
         except requests.ConnectionError as exc:
             raise WriterUnavailable(

@@ -9,6 +9,7 @@ Adapted from the archive's sync.py `_get_or_create_film`; the network/DB shape i
 identity (profile handle) and the crew/keyword capture are new.
 """
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
@@ -75,11 +76,18 @@ class EnrichmentService:
         except Exception:  # noqa: BLE001
             details = {}
 
-        film = self._film_from_details(tmdb_id, details, parsed)
-        db.add(film)
-        db.commit()
-        db.refresh(film)
-        return film
+        return self._insert_film(db, tmdb_id, self._film_from_details(tmdb_id, details, parsed))
+
+    def _insert_film(self, db: Session, tmdb_id: int, film: Film) -> Film | None:
+        """Insert a Film, tolerating a concurrent request that inserted the same one first."""
+        try:
+            db.add(film)
+            db.commit()
+            db.refresh(film)
+            return film
+        except IntegrityError:
+            db.rollback()
+            return db.query(Film).filter_by(tmdb_id=tmdb_id, media_type="film").first()
 
     def get_or_create_by_tmdb_id(self, db: Session, tmdb_id: int) -> Film | None:
         """Fetch/create a Film from a known TMDB id (no title search). Used for ranker candidates."""
@@ -93,11 +101,7 @@ class EnrichmentService:
         if not details or not details.get("id"):
             return None
         parsed = ParsedFilm(title=details.get("title") or "", year=None, slug=None)
-        film = self._film_from_details(tmdb_id, details, parsed)
-        db.add(film)
-        db.commit()
-        db.refresh(film)
-        return film
+        return self._insert_film(db, tmdb_id, self._film_from_details(tmdb_id, details, parsed))
 
     def _film_from_details(self, tmdb_id: int, details: dict, parsed: ParsedFilm) -> Film:
         release = details.get("release_date") or ""
