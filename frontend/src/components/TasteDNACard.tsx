@@ -42,10 +42,12 @@ export default function TasteDNACard({
       </div>
 
       {summary ? (
-        <p className="max-w-3xl font-display text-2xl leading-relaxed text-text-primary md:text-[1.7rem]">
+        <p className="max-w-3xl font-display text-2xl italic leading-relaxed text-text-primary md:text-[1.7rem]">
           {summary}
         </p>
       ) : null}
+
+      <div className="rule" />
 
       <div className="grid gap-8 lg:grid-cols-[280px_1fr] lg:items-start">
         <div className="flex justify-center">
@@ -77,6 +79,8 @@ export default function TasteDNACard({
           ) : null}
         </div>
       </div>
+
+      <div className="rule" />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat

@@ -71,7 +71,16 @@ The state of the world for whoever (a fresh session, or you) picks this up. Pair
   e2e (2)** drives the full journey against a seeded offline backend (`scripts/seed_e2e.py`,
   `E2E_MODE=1` forces TMDB offline → cache-fallback recs, template prose). Added along the way:
   ranker cache-fallback when discovery is thin, `_insert_film` IntegrityError resilience (concurrent
-  recs), fast-fail Ollama connect timeout. Phase 7 (design) next; Phase 4 live-Groq still pending key.
+  recs), fast-fail Ollama connect timeout. Phase 4 live-Groq still pending key.
+- **Phase 7 is done (2026-07-11).** Design direction chosen with the user: a light **"film journal"
+  paper** aesthetic (a deliberate departure from DESIGN.md's dark-only note — the handover calls that
+  doc a reference, not a mandate). Rewrote `globals.css` tokens to warm cream stock + near-black ink
+  + a single rust-vermilion editorial accent (Playfair/DM Sans/JetBrains Mono kept). The budget went
+  to the two hero objects: the Taste DNA card reads like a printed review (Playfair-italic summary,
+  ruled dividers, rust radar, green/rust genre bars) and recommendations are numbered catalogue
+  entries (01–08) where the reason is the body and posters are plates. Chrome stays plain. Verified
+  by screenshot on both screens; 8 vitest + `tsc` + `next build` + the Playwright journey all still
+  green. Only Phase 8 (deploy) remains — it needs the user's Vercel/HF/Turso/Groq accounts.
 
 Repo root today:
 
@@ -183,7 +192,7 @@ pass. Commit at each boundary.
   82 tests 2026-07-11; **live LLM verification pending a GROQ_API_KEY or local Ollama** (see note)
 - [x] **Phase 5** — API + orchestration + guardrails (e2e upload→recs; rate/capacity states) — done 2026-07-11
 - [x] **Phase 6** — Frontend (two screens, full journey, e2e passes) — done 2026-07-11
-- [ ] **Phase 7** — Design pass (cohesive across states/viewports)
+- [x] **Phase 7** — Design pass (cohesive across states/viewports) — done 2026-07-11
 - [ ] **Phase 8** — Deploy (Vercel + HF Space + Turso + Groq; live, free, working)
 
 ---

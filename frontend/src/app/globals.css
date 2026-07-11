@@ -1,36 +1,43 @@
-@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokens ported from the archive. The Phase 7 design pass revisits these against
-   real content; kept here so Tailwind's token-mapped colors/fonts resolve in the meantime. */
+/* Cinerex — "film journal" light theme (Phase 7).
+   Warm printed-paper stock, near-black ink, a single editorial rust accent. The two hero objects —
+   the Taste DNA card and the recommendation — carry the design; everything else stays quiet. */
 :root {
-  --bg-void: #07090c;
-  --bg-base: #0d1014;
-  --bg-surface: #151a20;
-  --bg-elevated: #1d242b;
-  --bg-overlay: #26313a;
-  --text-primary: #f5f1ea;
-  --text-secondary: #b8c0bc;
-  --text-muted: #6f7b7a;
-  --text-inverse: #0d0c0b;
-  --accent: #f3c94f;
-  --accent-dim: #9f8734;
-  --accent-glow: rgba(243, 201, 79, 0.14);
-  --cyan: #62d2c9;
-  --rose: #ee7f87;
-  --positive: #79d49b;
-  --warning: #f2b55f;
-  --negative: #e16f72;
-  --border-subtle: rgba(245, 241, 234, 0.07);
-  --border-default: rgba(245, 241, 234, 0.13);
-  --border-accent: rgba(243, 201, 79, 0.34);
+  --bg-void: #fffdf9;
+  --bg-base: #f2ece0;        /* page — warm cream paper */
+  --bg-surface: #fbf7ef;     /* cards — lighter stock */
+  --bg-elevated: #ebe3d4;    /* poster plates, hover */
+  --bg-overlay: #e5dcc9;
+
+  --text-primary: #211c15;   /* ink */
+  --text-secondary: #5c5344; /* warm grey-brown */
+  --text-muted: #97907e;
+  --text-inverse: #faf5ea;   /* on the accent */
+
+  --accent: #b1401e;         /* rust vermilion — a journal spine */
+  --accent-dim: #8c3316;
+  --accent-glow: rgba(177, 64, 30, 0.1);
+  --gold: #9c7518;           /* secondary warm gold for small data marks */
+  --cyan: #3f6f6a;
+  --rose: #a5461f;
+
+  --positive: #4d7a3e;
+  --warning: #a86f16;
+  --negative: #9f3320;
+
+  --border-subtle: rgba(33, 28, 21, 0.08);
+  --border-default: rgba(33, 28, 21, 0.16);
+  --border-accent: rgba(177, 64, 30, 0.4);
+
   --font-display: "Playfair Display", Georgia, serif;
   --font-body: "DM Sans", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
-  --radius-card: 8px;
+  --radius-card: 3px;
 }
 
 * {
@@ -38,7 +45,7 @@
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
@@ -48,6 +55,7 @@ body {
   color: var(--text-primary);
   font-family: var(--font-body);
   line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
 }
 
 a {
@@ -60,4 +68,95 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+/* A printed-plate card: hairline ink rule, soft paper shadow, sharp corners. */
+.panel {
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  box-shadow:
+    0 1px 1px rgba(33, 28, 21, 0.03),
+    0 10px 30px rgba(33, 28, 21, 0.06);
+}
+
+.button-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--text-inverse);
+  padding: 0.85rem 1.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.8rem;
+  transition: background 160ms ease;
+}
+
+.button-primary:hover:not(:disabled) {
+  background: var(--accent-dim);
+}
+
+.button-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.button-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  border: 1px solid var(--border-default);
+  background: transparent;
+  padding: 0.5rem 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-primary);
+  transition: border-color 160ms ease;
+}
+
+.button-secondary:hover {
+  border-color: var(--text-primary);
+}
+
+.input-base {
+  width: 100%;
+  border-radius: 2px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-void);
+  color: var(--text-primary);
+  padding: 0.85rem 1rem;
+}
+
+.input-base::placeholder {
+  color: var(--text-muted);
+}
+
+.input-base:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.stat-card {
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-void);
+  padding: 0.85rem 1rem;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+/* A thin ink rule to divide sections of a plate, like a printed page. */
+.rule {
+  height: 1px;
+  background: var(--border-default);
 }

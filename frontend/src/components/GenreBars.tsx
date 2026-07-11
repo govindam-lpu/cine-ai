@@ -16,7 +16,7 @@ export default function GenreBars({ genres }: { genres: GenreAffinity[] }) {
         return (
           <div key={g.genre} className="flex items-center gap-3 text-sm">
             <span className="w-28 shrink-0 truncate text-text-secondary">{g.genre}</span>
-            <div className="relative h-3 flex-1 rounded-sm bg-[rgba(245,241,234,0.04)]">
+            <div className="relative h-3 flex-1 rounded-sm bg-[rgba(33,28,21,0.06)]">
               <div className="absolute left-1/2 top-0 h-full w-px bg-border-default" />
               <div
                 className="absolute top-0 h-full rounded-sm"

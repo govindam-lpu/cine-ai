@@ -62,3 +62,5 @@ frontend/playwright/.cache/
 cine_ai.db
 cinerex.db
 test_cinerex.db
+# design screenshots (local only)
+frontend/shots/

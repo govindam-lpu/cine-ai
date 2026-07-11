@@ -190,8 +190,8 @@ export default function ProfileClient({ handle }: { handle: string }) {
           <LoadingState messages={["Finding your films…"]} />
         ) : (
           <div className="grid gap-4">
-            {recs.map((rec) => (
-              <RecommendationCard key={rec.tmdb_id} rec={rec} />
+            {recs.map((rec, i) => (
+              <RecommendationCard key={rec.tmdb_id} rec={rec} index={i + 1} />
             ))}
             {!recDone ? <p className="font-mono text-xs text-text-muted">writing more…</p> : null}
           </div>
