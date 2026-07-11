@@ -21,7 +21,15 @@ The state of the world for whoever (a fresh session, or you) picks this up. Pair
   resolves films via TMDB (cache-first, one `append_to_response=credits,keywords` call, crew+keyword
   capture) behind an async job with progress; `POST /api/profiles/upload`, the job-progress endpoint,
   and the local-dev `POST /api/profiles/{handle}/sync` scrape. **44 pytest pass**; verified live
-  against real TMDB (7/7 fixture films matched, crew/keywords/genres correct). Phase 2 (evidence) next.
+  against real TMDB (7/7 fixture films matched, crew/keywords/genres correct).
+- **Phase 2 is done (2026-07-11).** `evidence.py` — pure-Python statistics (genre/era/crew affinity
+  baseline-relative, contrarianism = corr(rating, vote_average), obscurity = corr(rating,
+  log10 vote_count), patience = corr(rating, runtime), rewatch signal, recency drift, discovery
+  seeds), each with sample size + confidence; correlations return None (not NaN) on zero variance.
+  Min-viable gate (≥25 films, ≥15 rated) with a counts-in-the-message error. Pure core + thin DB
+  adapters (load_watches/store_evidence). **58 pytest pass**; validated on a real 28-film library
+  via live TMDB — signals are legible (e.g. obscurity −0.63, Tarkovsky surfaced at n=5). NOT yet
+  wired into the ingest job — the "analyzing" step lands in Phase 5 orchestration. Phase 3 next.
 
 Repo root today:
 
@@ -127,7 +135,7 @@ pass. Commit at each boundary.
 
 - [x] **Phase 0** — Scaffold & harness (both apps boot, `/health`, tests run) — done 2026-07-11
 - [x] **Phase 1** — Data model + ingestion (upload real export → enriched films stored) — done 2026-07-11
-- [ ] **Phase 2** — Evidence layer (statistics + min-profile gate)
+- [x] **Phase 2** — Evidence layer (statistics + min-profile gate) — done 2026-07-11
 - [ ] **Phase 3** — Ranker (top-8, watched excluded, held-out eval beats random)
 - [ ] **Phase 4** — Writer (Ollama + Groq behind one protocol, fallback works)
 - [ ] **Phase 5** — API + orchestration + guardrails (e2e upload→recs; rate/capacity states)
