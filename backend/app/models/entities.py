@@ -71,7 +71,9 @@ class Film(Base):
     tmdb_vote_count: Mapped[int | None] = mapped_column(Integer)        # → obscurity preference
     poster_path: Mapped[str | None] = mapped_column(String)
     backdrop_path: Mapped[str | None] = mapped_column(String)
-    # NOTE: `embedding` column is added in Phase 3 (per 01_BUILD_PHASES.md); a DB reset picks it up.
+    # 384-dim MiniLM vector of overview+genres+keywords, cached (it never changes). Added in Phase 3;
+    # v1 has no migrations, so a DB reset (delete the SQLite file) picks up the new column.
+    embedding: Mapped[list | None] = mapped_column(JSON)
 
 
 class WatchHistory(Base):

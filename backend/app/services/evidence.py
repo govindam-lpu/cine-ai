@@ -280,8 +280,15 @@ def _seeds(watches: list[WatchDatum], baseline: float | None) -> dict:
     eras = _bucket_affinity(watches, _decade_keys, baseline, "decade")
 
     liked = [g for g in genres if (g["delta"] or 0) > 0 and g["n"] >= 2]
-    liked.sort(key=lambda d: d["delta"], reverse=True)
-    seed_genres = [g["genre"] for g in liked[:4]] or [g["genre"] for g in genres[:3]]
+    # Blend representation and affinity: lead with the most-watched liked genres (so a dominant
+    # Drama isn't dropped for a niche high-delta genre), then add the strongest affinities.
+    by_share = sorted(liked, key=lambda d: d["share"], reverse=True)
+    by_delta = sorted(liked, key=lambda d: d["delta"], reverse=True)
+    seed_genres: list[str] = []
+    for g in by_share[:2] + by_delta[:4]:
+        if g["genre"] not in seed_genres:
+            seed_genres.append(g["genre"])
+    seed_genres = seed_genres[:5] or [g["genre"] for g in genres[:3]]
 
     seed_decades = [e["decade"] for e in eras if (e["delta"] or 0) >= 0][:3] or [
         e["decade"] for e in eras[:2]

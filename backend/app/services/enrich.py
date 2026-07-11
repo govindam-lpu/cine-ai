@@ -81,6 +81,24 @@ class EnrichmentService:
         db.refresh(film)
         return film
 
+    def get_or_create_by_tmdb_id(self, db: Session, tmdb_id: int) -> Film | None:
+        """Fetch/create a Film from a known TMDB id (no title search). Used for ranker candidates."""
+        film = db.query(Film).filter_by(tmdb_id=tmdb_id, media_type="film").first()
+        if film:
+            return film
+        try:
+            details = self.tmdb.movie_details(tmdb_id, append="credits,keywords")
+        except Exception:  # noqa: BLE001
+            return None
+        if not details or not details.get("id"):
+            return None
+        parsed = ParsedFilm(title=details.get("title") or "", year=None, slug=None)
+        film = self._film_from_details(tmdb_id, details, parsed)
+        db.add(film)
+        db.commit()
+        db.refresh(film)
+        return film
+
     def _film_from_details(self, tmdb_id: int, details: dict, parsed: ParsedFilm) -> Film:
         release = details.get("release_date") or ""
         release_year = int(release[:4]) if release[:4].isdigit() else parsed.year

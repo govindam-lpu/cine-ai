@@ -29,7 +29,17 @@ The state of the world for whoever (a fresh session, or you) picks this up. Pair
   Min-viable gate (≥25 films, ≥15 rated) with a counts-in-the-message error. Pure core + thin DB
   adapters (load_watches/store_evidence). **58 pytest pass**; validated on a real 28-film library
   via live TMDB — signals are legible (e.g. obscurity −0.63, Tarkovsky surfaced at n=5). NOT yet
-  wired into the ingest job — the "analyzing" step lands in Phase 5 orchestration. Phase 3 next.
+  wired into the ingest job — the "analyzing" step lands in Phase 5 orchestration.
+- **Phase 3 is done (2026-07-11).** `embeddings.py` (fastembed all-MiniLM-L6-v2, 384-dim, unit-norm;
+  verified sane — no sentence-transformers fallback needed) + `ranker.py`: taste vector
+  (rating-weighted mean of embeddings, baseline-centered), TMDB discovery seeded by evidence, watched
+  filtered in Python (hard invariant), score = cosine + evidence tilts (director/genre/era/obscurity/
+  patience), top-8 each with a `signals` bundle. Held-out eval (pairwise AUC over ≥1-star-gap pairs).
+  `Film.embedding` column added (JSON; DB reset picks it up). **65 pytest pass** (watched-exclusion
+  property test, real-embedding taste vector, AUC eval, embedding cache). Tuned against real output:
+  discovery sorts by vote_average (not popularity) with no language hard-filter, seeds blend
+  representation+affinity — arthouse viewer now gets Amadeus/Cinema Paradiso/Night and Fog (AUC 0.89,
+  was 0.58 with popularity sort). Not yet wired to an endpoint — that's Phase 5. Phase 4 (writer) next.
 
 Repo root today:
 
@@ -136,7 +146,7 @@ pass. Commit at each boundary.
 - [x] **Phase 0** — Scaffold & harness (both apps boot, `/health`, tests run) — done 2026-07-11
 - [x] **Phase 1** — Data model + ingestion (upload real export → enriched films stored) — done 2026-07-11
 - [x] **Phase 2** — Evidence layer (statistics + min-profile gate) — done 2026-07-11
-- [ ] **Phase 3** — Ranker (top-8, watched excluded, held-out eval beats random)
+- [x] **Phase 3** — Ranker (top-8, watched excluded, held-out eval beats random) — done 2026-07-11
 - [ ] **Phase 4** — Writer (Ollama + Groq behind one protocol, fallback works)
 - [ ] **Phase 5** — API + orchestration + guardrails (e2e upload→recs; rate/capacity states)
 - [ ] **Phase 6** — Frontend (two screens, full journey, e2e passes)
