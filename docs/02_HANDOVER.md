@@ -81,6 +81,14 @@ The state of the world for whoever (a fresh session, or you) picks this up. Pair
   entries (01–08) where the reason is the body and posters are plates. Chrome stays plain. Verified
   by screenshot on both screens; 8 vitest + `tsc` + `next build` + the Playwright journey all still
   green. Only Phase 8 (deploy) remains — it needs the user's Vercel/HF/Turso/Groq accounts.
+- **Phase 8 artifacts ready (2026-07-11); live deploy pending user accounts.** `backend/Dockerfile`
+  (HF Space, non-root uid 1000, port 7860, bakes in the embedding model) + `.dockerignore`; the DB
+  session now handles the Turso `sqlite+libsql://` URL (auth token in the URL, no check_same_thread).
+  Full runbook in **`docs/03_DEPLOY.md`** (Groq key → Turso → HF Space secrets → Vercel → CORS →
+  cold-start → live smoke test). The actual deploy + `v1.0` tag need the user's accounts — I can't
+  create accounts or hold secrets. Docker wasn't available in the build env, so the image is unbuilt
+  locally (it builds on HF's infra). **Still open: Phase 4's one live GroqWriter call** — add
+  `GROQ_API_KEY` to root `.env` and I'll run it.
 
 Repo root today:
 
@@ -193,7 +201,8 @@ pass. Commit at each boundary.
 - [x] **Phase 5** — API + orchestration + guardrails (e2e upload→recs; rate/capacity states) — done 2026-07-11
 - [x] **Phase 6** — Frontend (two screens, full journey, e2e passes) — done 2026-07-11
 - [x] **Phase 7** — Design pass (cohesive across states/viewports) — done 2026-07-11
-- [ ] **Phase 8** — Deploy (Vercel + HF Space + Turso + Groq; live, free, working)
+- [~] **Phase 8** — Deploy (Vercel + HF Space + Turso + Groq; live, free, working) — ARTIFACTS
+  READY 2026-07-11; live deploy pending the user's platform accounts (see docs/03_DEPLOY.md)
 
 ---
 
