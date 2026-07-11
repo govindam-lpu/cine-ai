@@ -57,6 +57,50 @@ ROMCOM_TEXTS = [
 ]
 
 
+# Shared writer fixtures: a fleshed-out evidence bundle + one recommended film with fired signals.
+WRITER_EVIDENCE = {
+    "counts": {"rated": 40, "rewatched": 3},
+    "baseline_rating": 3.8,
+    "genre_affinity": [{"genre": "Drama", "delta": 0.5}, {"genre": "Action", "delta": -0.4}],
+    "era_affinity": [{"decade": "1960s", "delta": 0.6}],
+    "crew_affinity": {"director": [{"name": "David Lean", "delta": 0.7, "n": 4}]},
+    "contrarianism": {"value": 0.4},
+    "obscurity_preference": {"value": -0.5},
+    "patience": {"value": 0.4},
+}
+WRITER_FILM = {"title": "Doctor Zhivago", "year": 1965, "overview": "An epic romance across a war."}
+WRITER_SIGNALS = [
+    {"factor": "similarity", "strength": 0.3, "detail": "It sits close to the center of what you rate highly."},
+    {"factor": "director", "strength": 0.2, "detail": "You rate David Lean's films above your average.", "name": "David Lean"},
+    {"factor": "genre", "strength": 0.15, "detail": "Drama is one of your higher-rated genres.", "name": "Drama"},
+]
+
+
+class FakeHTTPResponse:
+    """Minimal requests.Response stand-in for mocking Groq/Ollama HTTP at the transport layer."""
+
+    def __init__(self, status_code: int = 200, payload: dict | None = None) -> None:
+        self.status_code = status_code
+        self._payload = payload or {}
+
+    def json(self) -> dict:
+        return self._payload
+
+    def raise_for_status(self) -> None:
+        import requests
+
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"HTTP {self.status_code}")
+
+
+def groq_payload(content: str) -> dict:
+    return {"choices": [{"message": {"content": content}}]}
+
+
+def ollama_payload(content: str) -> dict:
+    return {"message": {"content": content}}
+
+
 class FakeTMDB:
     """In-memory TMDB stand-in with call counters, so tests never hit the network."""
 

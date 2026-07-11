@@ -39,7 +39,17 @@ The state of the world for whoever (a fresh session, or you) picks this up. Pair
   property test, real-embedding taste vector, AUC eval, embedding cache). Tuned against real output:
   discovery sorts by vote_average (not popularity) with no language hard-filter, seeds blend
   representation+affinity — arthouse viewer now gets Amadeus/Cinema Paradiso/Night and Fog (AUC 0.89,
-  was 0.58 with popularity sort). Not yet wired to an endpoint — that's Phase 5. Phase 4 (writer) next.
+  was 0.58 with popularity sort). Not yet wired to an endpoint — that's Phase 5.
+- **Phase 4 is code-complete (2026-07-11), live verification pending.** `writer.py`: `Writer` protocol
+  with `GroqWriter` (llama-3.3-70b-versatile, JSON-object mode — 70B doesn't support Groq strict
+  json_schema, so we validate with Pydantic) and `OllamaWriter` (llama3.2:3b, `format:json`), chosen
+  by `WRITER_BACKEND`. Prompts in `app/prompts/*.md`. Retry once on bad JSON → **template fallback**
+  built from the same signals (real, specific prose, no LLM — verified on the real arthouse recs).
+  429 → `WriterRateLimited` (for Phase 5 capacity); backend-unreachable → `WriterUnavailable`
+  (actionable). **82 pytest pass** (schema/retry/fallback/protocol-parity/429/unavailable).
+  **BLOCKED on live check:** the DoD wants one real GroqWriter call (needs a free `GROQ_API_KEY` —
+  I can't create the account) and/or OllamaWriter (needs local Ollama). Neither is available in this
+  environment. Everything else is done and tested; Phase 5 can be built against the writer meanwhile.
 
 Repo root today:
 
@@ -147,7 +157,8 @@ pass. Commit at each boundary.
 - [x] **Phase 1** — Data model + ingestion (upload real export → enriched films stored) — done 2026-07-11
 - [x] **Phase 2** — Evidence layer (statistics + min-profile gate) — done 2026-07-11
 - [x] **Phase 3** — Ranker (top-8, watched excluded, held-out eval beats random) — done 2026-07-11
-- [ ] **Phase 4** — Writer (Ollama + Groq behind one protocol, fallback works)
+- [~] **Phase 4** — Writer (Ollama + Groq behind one protocol, fallback works) — CODE COMPLETE +
+  82 tests 2026-07-11; **live LLM verification pending a GROQ_API_KEY or local Ollama** (see note)
 - [ ] **Phase 5** — API + orchestration + guardrails (e2e upload→recs; rate/capacity states)
 - [ ] **Phase 6** — Frontend (two screens, full journey, e2e passes)
 - [ ] **Phase 7** — Design pass (cohesive across states/viewports)
