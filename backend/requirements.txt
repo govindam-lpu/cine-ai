@@ -1,0 +1,30 @@
+# Cinerex backend — pinned dependencies.
+# Local dev (Windows) and the Hugging Face Space (Linux Docker) install from this file.
+
+# --- Web framework ---
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+python-multipart>=0.0.9          # multipart uploads (Letterboxd export ZIP)
+
+# --- ORM / config ---
+sqlalchemy==2.0.43
+pydantic==2.11.7
+pydantic-settings==2.10.1
+
+# --- HTTP / scraping / ingestion ---
+requests==2.32.4
+beautifulsoup4==4.13.5
+
+# --- Embeddings: CPU / ONNX, no PyTorch (keeps the image ~200MB, fits the free Space) ---
+fastembed==0.8.0
+numpy>=1.26,<3
+
+# --- Production database dialect: Turso / libSQL ---
+# sqlalchemy-libsql ships Linux/macOS wheels only (no Windows). Local Windows dev uses plain
+# SQLite and does not need it, so the marker skips it there; the Linux Space image installs it.
+# "SQLite locally, Turso in production, one connection string apart" — see docs/PLAN.md constraint 6.
+sqlalchemy-libsql==0.2.0 ; platform_system != "Windows"
+
+# --- Tests ---
+pytest>=8,<9
+httpx>=0.27                       # Starlette TestClient transport

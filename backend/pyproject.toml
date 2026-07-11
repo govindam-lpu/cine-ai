@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+# Run from backend/. pythonpath="." lets `import app` and `import main` resolve without
+# an install step; testpaths keeps discovery scoped to the suite.
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"

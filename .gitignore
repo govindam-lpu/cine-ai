@@ -26,6 +26,7 @@ node_modules/
 out/
 build/
 dist/
+*.tsbuildinfo
 
 # Logs
 npm-debug.log*
@@ -42,6 +43,22 @@ Thumbs.db
 .idea/
 
 # ----------------------
+# Python tooling
+# ----------------------
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# ----------------------
+# Test / e2e artifacts
+# ----------------------
+frontend/test-results/
+frontend/playwright-report/
+frontend/playwright/.cache/
+
+# ----------------------
 # Misc
 # ----------------------
 cine_ai.db
+cinerex.db
+test_cinerex.db

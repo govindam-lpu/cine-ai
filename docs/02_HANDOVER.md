@@ -12,7 +12,9 @@ The state of the world for whoever (a fresh session, or you) picks this up. Pair
 - **The old build is archived, intact, under `archive/`.** Nothing at the repo root runs yet — the
   fresh `backend/` and `frontend/` are built by Phase 0. This is deliberate: we start fresh and
   cherry-pick from the archive, because the requirements changed.
-- **Nothing of the new build exists yet.** Phase 0 is the first thing to do.
+- **Phase 0 is done (2026-07-11).** Fresh `backend/` (FastAPI) and `frontend/` (Next.js 14) boot;
+  `GET /health` returns `{status, version}`; `pytest` (4) and `vitest` (3) + `tsc --noEmit` are green;
+  the production `next build` compiles. `.venv` was recreated (the old one had no pip). Phase 1 next.
 
 Repo root today:
 
@@ -116,7 +118,7 @@ self-create on startup).
 Mark a phase done only when its Definition of Done in `01_BUILD_PHASES.md` holds **and** its tests
 pass. Commit at each boundary.
 
-- [ ] **Phase 0** — Scaffold & harness (both apps boot, `/health`, tests run)
+- [x] **Phase 0** — Scaffold & harness (both apps boot, `/health`, tests run) — done 2026-07-11
 - [ ] **Phase 1** — Data model + ingestion (upload real export → enriched films stored)
 - [ ] **Phase 2** — Evidence layer (statistics + min-profile gate)
 - [ ] **Phase 3** — Ranker (top-8, watched excluded, held-out eval beats random)
@@ -142,6 +144,22 @@ pass. Commit at each boundary.
 model id and API; the Turso/libSQL SQLAlchemy dialect + connection string; Groq's structured-output
 parameter and current limits; Ollama's `format` parameter. Getting these from the live docs at build
 time is part of the job.
+
+**Confirmed during Phase 0 (2026-07-11):**
+- Turso/libSQL dialect: package `sqlalchemy-libsql` (v0.2.0), dialect string `sqlite+libsql://`,
+  URL form `sqlite+libsql://<db>-<org>.turso.io/?authToken=<token>&secure=true`. **Linux/macOS wheels
+  only — no Windows.** So it's gated in `requirements.txt` with `; platform_system != "Windows"`:
+  local Windows dev uses plain SQLite (doesn't need it), the Linux Space image installs it. Phase 8
+  will finalize the Turso connect args.
+- `fastembed` 0.8.0 installs clean on Windows/Py3.12 (pulls `onnxruntime`, no PyTorch). Exact model
+  id/vector parity still to verify in Phase 3, per the plan.
+
+**Deferred to Phase 8 (deploy) — Next.js security audit:** `npm audit` flags a rolling advisory range
+that no Next.js 14.2.x release clears (only Next 16+, a breaking major that would move off the
+specified Next 14 stack). Pinned to the latest patched **14.2.35**. Residual advisories are largely
+inapplicable to this app (App Router; no i18n, middleware, remote image optimization, or WS upgrades;
+backend is a separate service) and it isn't deployed yet. Re-evaluate the real deployed surface at
+Phase 8 before going public.
 
 ---
 

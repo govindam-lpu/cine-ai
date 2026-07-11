@@ -44,6 +44,29 @@ residential IP required.
 Next.js (Vercel) · FastAPI (Hugging Face Space) · Turso (SQLite-compatible) · fastembed (ONNX, CPU) ·
 Groq `llama-3.3-70b-versatile` / local Ollama. All free tiers.
 
+## Run it locally
+
+Backend (FastAPI) and frontend (Next.js 14) live at the repo root. A Python venv is at `.venv`.
+
+```bash
+# backend  → http://127.0.0.1:8000  (GET /health)
+cd backend && pip install -r requirements.txt
+uvicorn main:app --reload
+pytest
+
+# frontend → http://localhost:3000
+cd frontend && npm install
+npm run dev
+npm run test        # vitest
+npm run typecheck   # tsc --noEmit
+
+# both, containerized
+docker compose up
+```
+
+Reset the local database: delete the SQLite file (`backend/cinerex.db`) and restart — v1 has no
+migrations; tables self-create on startup.
+
 ## Archive
 
 [`archive/`](archive/) is the complete prior build, kept for reference — the Letterboxd scraper and

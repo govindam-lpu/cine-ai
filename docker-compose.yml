@@ -1,0 +1,32 @@
+# Local development stack: backend (FastAPI) + frontend (Next.js).
+# Uses stock base images and mounts source — no Dockerfiles needed yet.
+# The production Space Dockerfile is built in Phase 8.
+
+services:
+  backend:
+    image: python:3.12-slim
+    working_dir: /app
+    command: sh -c "pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./.env
+    environment:
+      # Inside compose the frontend origin is the browser's localhost:3000.
+      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+
+  frontend:
+    image: node:20
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --hostname 0.0.0.0"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
