@@ -27,8 +27,30 @@ def client():
 
 
 @pytest.fixture(autouse=True)
-def _fresh_tables():
-    """Recreate all tables around each test so rows never leak between tests."""
+def _drain_and_reset():
+    """Reset in-process guardrail state before each test, and drain the ingest queue after — the
+    queue runs jobs on a worker thread, so tables must not be dropped while a job is mid-write."""
+    import time
+
+    from app.api.profiles import rec_limiter_ip, upload_limiter_handle, upload_limiter_ip
+    from app.core.budget import budget
+    from app.core.queue import ingest_queue
+
+    for limiter in (upload_limiter_ip, upload_limiter_handle, rec_limiter_ip):
+        limiter.reset()
+    budget.reset()
+
+    yield
+
+    deadline = time.time() + 20
+    while ingest_queue.depth() > 0 and time.time() < deadline:
+        time.sleep(0.02)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_tables(_drain_and_reset):
+    """Recreate all tables around each test so rows never leak between tests. Depends on
+    _drain_and_reset so any prior job has finished before we drop tables."""
     from app.db.session import Base, engine
 
     Base.metadata.drop_all(bind=engine)

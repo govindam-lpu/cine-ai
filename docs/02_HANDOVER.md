@@ -50,6 +50,18 @@ The state of the world for whoever (a fresh session, or you) picks this up. Pair
   **BLOCKED on live check:** the DoD wants one real GroqWriter call (needs a free `GROQ_API_KEY` —
   I can't create the account) and/or OllamaWriter (needs local Ollama). Neither is available in this
   environment. Everything else is done and tested; Phase 5 can be built against the writer meanwhile.
+- **Phase 5 is done (2026-07-11).** Full endpoint surface wired end to end: `run_full_ingest`
+  (enrich → analyze = evidence + written summary → store) on a single-worker queue; `GET
+  /api/profiles/{handle}` (discriminated states: not_found 404 / building / needs_more_films /
+  failed / ready); `GET /api/profiles/{handle}/recommendations` ranks fresh and streams reasons as
+  SSE, one film at a time. Guardrails: per-IP + per-handle rate limits (`ratelimit.py`), Groq daily
+  budget with a friendly at-capacity state (`budget.py`, only metered when WRITER_BACKEND=groq),
+  single-worker queue with position (`queue.py`), `noindex` on profile responses. Below-gate
+  profiles surface the friendly message; recs-before-ready return "building", never an empty stream.
+  **92 pytest pass** incl. a full upload→profile→8-recs e2e (TMDB + writer stubbed), rate-limit 429s,
+  and the capacity path (templates + at_capacity flag, never a 500). NOTE: the app degrades to
+  template prose when no LLM is reachable, so the whole journey works locally without Ollama/Groq —
+  which is what lets Phase 6's e2e run against a seeded backend. Phase 6 (frontend) next.
 
 Repo root today:
 
@@ -159,7 +171,7 @@ pass. Commit at each boundary.
 - [x] **Phase 3** — Ranker (top-8, watched excluded, held-out eval beats random) — done 2026-07-11
 - [~] **Phase 4** — Writer (Ollama + Groq behind one protocol, fallback works) — CODE COMPLETE +
   82 tests 2026-07-11; **live LLM verification pending a GROQ_API_KEY or local Ollama** (see note)
-- [ ] **Phase 5** — API + orchestration + guardrails (e2e upload→recs; rate/capacity states)
+- [x] **Phase 5** — API + orchestration + guardrails (e2e upload→recs; rate/capacity states) — done 2026-07-11
 - [ ] **Phase 6** — Frontend (two screens, full journey, e2e passes)
 - [ ] **Phase 7** — Design pass (cohesive across states/viewports)
 - [ ] **Phase 8** — Deploy (Vercel + HF Space + Turso + Groq; live, free, working)

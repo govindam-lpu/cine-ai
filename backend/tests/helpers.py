@@ -1,6 +1,7 @@
 """Test helpers: fixture access, in-memory ZIP builders, and a network-free TMDB stand-in."""
 
 import io
+import json
 import zipfile
 from pathlib import Path
 
@@ -104,9 +105,12 @@ def ollama_payload(content: str) -> dict:
 class FakeTMDB:
     """In-memory TMDB stand-in with call counters, so tests never hit the network."""
 
-    def __init__(self, matches: dict[str, dict], details: dict[int, dict]) -> None:
+    def __init__(
+        self, matches: dict[str, dict], details: dict[int, dict], discover: list[dict] | None = None
+    ) -> None:
         self.matches = matches            # title -> search result ({"id": ...}) or None
         self.details = details            # tmdb_id -> details dict (may include credits/keywords)
+        self.discover = discover or []    # list of {"id": ...} candidate results
         self.search_calls = 0
         self.details_calls = 0
 
@@ -121,3 +125,105 @@ class FakeTMDB:
     def movie_details(self, tmdb_id: int, append: str | None = None) -> dict:
         self.details_calls += 1
         return self.details.get(tmdb_id, {})
+
+    def discover_movies(self, params: dict) -> dict:
+        # All candidates come back on page 1; later pages are empty.
+        return {"results": self.discover if params.get("page", 1) == 1 else []}
+
+
+_GENRES = ["Drama", "Science Fiction", "Thriller", "Comedy", "Romance", "War", "Crime", "History"]
+
+
+def _detail(tmdb_id: int, title: str, *, year: int, genres: list[str], overview: str,
+            runtime: int, votes: int, vote_avg: float, director: str) -> dict:
+    return {
+        "id": tmdb_id, "title": title, "release_date": f"{year}-01-01", "runtime": runtime,
+        "overview": overview, "original_language": "en", "vote_average": vote_avg, "vote_count": votes,
+        "genres": [{"name": g} for g in genres],
+        "credits": {"crew": [{"job": "Director", "name": director}]},
+        "keywords": {"keywords": [{"name": g.lower()} for g in genres]},
+    }
+
+
+def make_e2e_fixture():
+    """Build (ratings_csv_bytes, FakeTMDB) for the full pipeline e2e: 28 rated watched films (clears
+    the 25/15 gate) that all match, plus 12 unwatched discovery candidates. Deterministic."""
+    watched_lines = ["Date,Name,Year,Letterboxd URI,Rating"]
+    matches: dict[str, dict] = {}
+    details: dict[int, dict] = {}
+
+    for i in range(28):
+        tid = 1000 + i
+        title = f"Watched Film {i:02d}"
+        slug = f"watched-film-{i:02d}"
+        year = 1970 + (i % 40)
+        genres = [_GENRES[i % len(_GENRES)], _GENRES[(i + 3) % len(_GENRES)]]
+        rating = [5.0, 4.5, 4.0, 2.0, 1.5][i % 5]   # a spread so evidence has variance
+        overview = f"A {genres[0].lower()} story number {i} about people and consequences."
+        watched_lines.append(f"2025-01-{(i % 27) + 1:02d},{title},{year},https://letterboxd.com/film/{slug}/,{rating}")
+        matches[title] = {"id": tid}
+        details[tid] = _detail(tid, title, year=year, genres=genres, overview=overview,
+                               runtime=90 + (i % 5) * 20, votes=200 + i * 50, vote_avg=6.0 + (i % 5) * 0.4,
+                               director=f"Director {i % 6}")
+
+    discover: list[dict] = []
+    for j in range(12):
+        tid = 2000 + j
+        title = f"Candidate Film {j:02d}"
+        genres = [_GENRES[j % len(_GENRES)], _GENRES[(j + 2) % len(_GENRES)]]
+        details[tid] = _detail(tid, title, year=1980 + j, genres=genres,
+                               overview=f"A {genres[0].lower()} candidate {j} exploring memory and time.",
+                               runtime=100 + j * 5, votes=300 + j * 40, vote_avg=6.5 + (j % 4) * 0.5,
+                               director=f"Director {j % 6}")
+        discover.append({"id": tid})
+
+    csv_bytes = ("\n".join(watched_lines) + "\n").encode("utf-8")
+    return csv_bytes, FakeTMDB(matches, details, discover)
+
+
+class FakeWriter:
+    """Canned, deterministic writer — the pipeline's Writer seam for e2e tests (no LLM)."""
+
+    def write_taste_summary(self, evidence: dict) -> str:
+        return "You lean toward serious, character-driven films across several decades."
+
+    def write_reason(self, evidence: dict, film: dict, signals: list[dict]) -> str:
+        return f"Recommended for you because it fits your taste: {film['title']}."
+
+
+def seed_ready_profile(client, monkeypatch, handle: str = "e2e") -> str:
+    """Upload the e2e fixture with fakes injected and poll to a ready profile. Returns the handle."""
+    import time
+
+    import app.services.pipeline as pipeline
+
+    csv_bytes, fake_tmdb = make_e2e_fixture()
+    monkeypatch.setattr(pipeline, "make_tmdb", lambda: fake_tmdb)
+    monkeypatch.setattr(pipeline, "make_writer", lambda: FakeWriter())
+
+    resp = client.post(
+        "/api/profiles/upload",
+        files={"file": ("ratings.csv", csv_bytes, "text/csv")},
+        data={"handle": handle},
+    )
+    assert resp.status_code == 202, resp.text
+    job_id = resp.json()["job_id"]
+
+    deadline = time.time() + 25
+    while time.time() < deadline:
+        job = client.get(f"/api/profiles/{handle}/sync/{job_id}").json()
+        if job["status"] in ("complete", "failed"):
+            return handle
+        time.sleep(0.05)
+    raise AssertionError("profile did not finish building in time")
+
+
+def parse_sse(text: str) -> list[dict]:
+    """Parse `data:` payloads out of an SSE body, skipping the trailing done event."""
+    events = []
+    for line in text.splitlines():
+        if line.startswith("data: "):
+            payload = json.loads(line[len("data: "):])
+            if "count" not in payload:   # skip the done event
+                events.append(payload)
+    return events

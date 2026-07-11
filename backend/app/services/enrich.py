@@ -173,6 +173,48 @@ class EnrichmentService:
             )
 
 
+def enrich_into(
+    db: Session,
+    job: IngestJob,
+    profile_handle: str,
+    parsed_films: list[ParsedFilm],
+    source: str,
+    svc: EnrichmentService,
+) -> tuple[int, int]:
+    """Enrich films into the DB, updating job progress. Returns (matched, unmatched). Does not set
+    the job's terminal status — the caller decides what happens after enrichment (analyze, complete)."""
+    job.status = "enriching"
+    job.step = "Matching films on TMDB"
+    job.films_total = len(parsed_films)
+    db.commit()
+
+    matched = 0
+    unmatched = 0
+    for idx, parsed in enumerate(parsed_films, start=1):
+        try:
+            film = svc.resolve_film(db, parsed)
+        except Exception:  # noqa: BLE001 — a single bad film never fails the whole job
+            db.rollback()
+            film = None
+        if film is not None:
+            svc.upsert_watch(db, profile_handle, film, parsed, source)
+            matched += 1
+        else:
+            unmatched += 1
+
+        job.films_processed = idx
+        job.films_matched = matched
+        job.films_unmatched = unmatched
+        if idx % _PROGRESS_FLUSH_EVERY == 0 or idx == len(parsed_films):
+            db.commit()
+
+    profile = db.get(Profile, profile_handle)
+    if profile:
+        profile.last_ingest_at = utcnow()
+    db.commit()
+    return matched, unmatched
+
+
 def run_ingest_job(
     job_id: str,
     profile_handle: str,
@@ -181,43 +223,15 @@ def run_ingest_job(
     tmdb: TMDBService | None = None,
     session_factory=SessionLocal,
 ) -> None:
-    """Run enrichment for a job to completion. Opens (and owns) its own DB session — safe to
-    dispatch from a BackgroundTask/thread. Degrades to a `failed` job on unexpected errors,
-    never a stack trace to the client."""
+    """Enrich-only job (no analyze step). Retained for unit tests and the sync path; the full
+    upload pipeline uses pipeline.run_full_ingest, which adds evidence + summary."""
     svc = EnrichmentService(tmdb=tmdb)
     db = session_factory()
     try:
         job = db.get(IngestJob, job_id)
         if job is None:
             return
-        job.status = "enriching"
-        job.step = "Matching films on TMDB"
-        job.films_total = len(parsed_films)
-        db.commit()
-
-        matched = 0
-        unmatched = 0
-        for idx, parsed in enumerate(parsed_films, start=1):
-            try:
-                film = svc.resolve_film(db, parsed)
-            except Exception:  # noqa: BLE001 — a single bad film never fails the whole job
-                db.rollback()
-                film = None
-            if film is not None:
-                svc.upsert_watch(db, profile_handle, film, parsed, source)
-                matched += 1
-            else:
-                unmatched += 1
-
-            job.films_processed = idx
-            job.films_matched = matched
-            job.films_unmatched = unmatched
-            if idx % _PROGRESS_FLUSH_EVERY == 0 or idx == len(parsed_films):
-                db.commit()
-
-        profile = db.get(Profile, profile_handle)
-        if profile:
-            profile.last_ingest_at = utcnow()
+        enrich_into(db, job, profile_handle, parsed_films, source, svc)
         job.status = "complete"
         job.step = "Done"
         db.commit()

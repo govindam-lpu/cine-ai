@@ -5,6 +5,8 @@ inline) matches nothing — every film is counted as unmatched rather than dropp
 still completes. That's exactly the graceful no-keys path.
 """
 
+import time
+
 from tests.helpers import build_export_zip
 
 
@@ -14,6 +16,16 @@ def _upload(client, data: bytes, filename: str, handle: str | None = None):
     return client.post("/api/profiles/upload", files=files, data=form)
 
 
+def _poll_until_done(client, handle, job_id, timeout=25):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        job = client.get(f"/api/profiles/{handle}/sync/{job_id}").json()
+        if job["status"] in ("complete", "failed"):
+            return job
+        time.sleep(0.05)
+    raise AssertionError(f"job {job_id} did not finish in {timeout}s")
+
+
 def test_upload_happy_path_returns_job_and_completes(client):
     resp = _upload(client, build_export_zip(), "letterboxd-export.zip", handle="tester")
     assert resp.status_code == 202
@@ -21,8 +33,8 @@ def test_upload_happy_path_returns_job_and_completes(client):
     assert body["handle"] == "tester"
     assert body["job_id"]
 
-    # Background enrichment ran inline; poll the progress endpoint.
-    job = client.get(f"/api/profiles/tester/sync/{body['job_id']}").json()
+    # Enrichment runs on the single-worker queue → poll the progress endpoint to completion.
+    job = _poll_until_done(client, "tester", body["job_id"])
     assert job["status"] == "complete"
     assert job["films_total"] == 7
     assert job["films_processed"] == 7

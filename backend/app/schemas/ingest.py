@@ -14,6 +14,7 @@ class JobStatusResponse(BaseModel):
     source: str
     status: str                 # queued | parsing | enriching | analyzing | complete | failed
     step: str | None = None
+    queue_position: int = 0     # 0 = running/next; N = N ahead in line
     films_total: int
     films_processed: int
     films_matched: int
