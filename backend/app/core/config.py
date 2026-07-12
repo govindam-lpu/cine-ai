@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     tmdb_api_key: str = ""
     tmdb_bearer_token: str = ""
     tmdb_base_url: str = "https://api.themoviedb.org/3"
+    # Concurrent TMDB requests during enrichment. TMDB tolerates ~50 req/s; 16 in-flight with
+    # HTTP keep-alive turns a serial ~1.7s/film crawl into a fast parallel one. Raise for a
+    # faster box/network, lower it if TMDB starts 429ing (the client retries either way).
+    tmdb_concurrency: int = 16
 
     # --- Writer backend: prose generation only, never decisions ---
     # "ollama" for local dev, "groq" for production. Chosen at runtime, not import.

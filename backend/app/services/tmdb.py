@@ -4,13 +4,41 @@ Ported essentially as-is from the archive (good code with real edge handling), e
 `append_to_response` so one details call can return credits + keywords together — cutting
 enrichment from three requests per film to two. Absent API keys degrade gracefully: `_get`
 returns `{}` rather than raising, so the app boots and runs without them.
+
+Requests go through a pooled `requests.Session` with HTTP keep-alive, so enrichment's many
+calls reuse connections instead of paying a fresh TLS handshake each time (~300ms saved per
+call on a distant network). The session is shared across enrichment's worker threads — safe,
+because urllib3's connection pool is thread-safe for GETs — and retries 429/5xx with backoff.
 """
 
 from difflib import SequenceMatcher
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from app.core.config import settings
+
+
+def _build_session(bearer_token: str) -> requests.Session:
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=0.5,                       # 0.5s → 1s → 2s between attempts
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset({"GET"}),
+        respect_retry_after_header=True,          # honor TMDB's Retry-After on 429
+        raise_on_status=False,
+    )
+    # Pool sized to comfortably cover the enrichment concurrency.
+    pool = max(32, settings.tmdb_concurrency * 2)
+    adapter = HTTPAdapter(max_retries=retry, pool_connections=pool, pool_maxsize=pool)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    session.headers["accept"] = "application/json"
+    if bearer_token:
+        session.headers["Authorization"] = f"Bearer {bearer_token}"
+    return session
 
 
 class TMDBService:
@@ -18,6 +46,7 @@ class TMDBService:
         self.api_key = settings.tmdb_api_key
         self.bearer_token = settings.tmdb_bearer_token
         self.base_url = settings.tmdb_base_url
+        self.session = _build_session(self.bearer_token)
 
     @property
     def configured(self) -> bool:
@@ -28,13 +57,10 @@ class TMDBService:
     def _get(self, path: str, params: dict) -> dict:
         if not self.configured:
             return {}
-        headers = {"accept": "application/json"}
         payload = dict(params)
-        if self.bearer_token:
-            headers["Authorization"] = f"Bearer {self.bearer_token}"
-        elif self.api_key:
-            payload["api_key"] = self.api_key
-        response = requests.get(f"{self.base_url}{path}", params=payload, headers=headers, timeout=20)
+        if not self.bearer_token and self.api_key:
+            payload["api_key"] = self.api_key      # bearer (if set) rides on the session header
+        response = self.session.get(f"{self.base_url}{path}", params=payload, timeout=20)
         response.raise_for_status()
         return response.json()
 
