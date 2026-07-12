@@ -22,6 +22,12 @@ The state of the world for whoever (a fresh session, or you) picks this up. Pair
   capture) behind an async job with progress; `POST /api/profiles/upload`, the job-progress endpoint,
   and the local-dev `POST /api/profiles/{handle}/sync` scrape. **44 pytest pass**; verified live
   against real TMDB (7/7 fixture films matched, crew/keywords/genres correct).
+  - **Perf fix (2026-07-12, commit `ceb77c5`):** enrichment was serial and re-handshaked TLS per
+    call — a real 700-film upload took ~20 min. `enrich.py` now runs phased/concurrent (bulk-read
+    cache → search unknowns in a thread pool → fetch details in a thread pool → write on one thread,
+    so SQLite keeps a single writer and cache semantics are unchanged); `tmdb.py` uses a pooled
+    keep-alive `requests.Session` with 429/5xx retry+backoff; `TMDB_CONCURRENCY` (default 16) is the
+    knob. Measured live: 89 ms/film (was ~1.7 s) → **700 films ≈ 1 min**. All 93 pytest still pass.
 - **Phase 2 is done (2026-07-11).** `evidence.py` — pure-Python statistics (genre/era/crew affinity
   baseline-relative, contrarianism = corr(rating, vote_average), obscurity = corr(rating,
   log10 vote_count), patience = corr(rating, runtime), rewatch signal, recency drift, discovery
@@ -40,16 +46,16 @@ The state of the world for whoever (a fresh session, or you) picks this up. Pair
   discovery sorts by vote_average (not popularity) with no language hard-filter, seeds blend
   representation+affinity — arthouse viewer now gets Amadeus/Cinema Paradiso/Night and Fog (AUC 0.89,
   was 0.58 with popularity sort). Not yet wired to an endpoint — that's Phase 5.
-- **Phase 4 is code-complete (2026-07-11), live verification pending.** `writer.py`: `Writer` protocol
+- **Phase 4 is done (2026-07-11; live Groq verified 2026-07-12).** `writer.py`: `Writer` protocol
   with `GroqWriter` (llama-3.3-70b-versatile, JSON-object mode — 70B doesn't support Groq strict
   json_schema, so we validate with Pydantic) and `OllamaWriter` (llama3.2:3b, `format:json`), chosen
   by `WRITER_BACKEND`. Prompts in `app/prompts/*.md`. Retry once on bad JSON → **template fallback**
   built from the same signals (real, specific prose, no LLM — verified on the real arthouse recs).
   429 → `WriterRateLimited` (for Phase 5 capacity); backend-unreachable → `WriterUnavailable`
   (actionable). **82 pytest pass** (schema/retry/fallback/protocol-parity/429/unavailable).
-  **BLOCKED on live check:** the DoD wants one real GroqWriter call (needs a free `GROQ_API_KEY` —
-  I can't create the account) and/or OllamaWriter (needs local Ollama). Neither is available in this
-  environment. Everything else is done and tested; Phase 5 can be built against the writer meanwhile.
+  **Live-verified 2026-07-12:** one real GroqWriter summary + reason via `llama-3.3-70b-versatile`
+  returned valid JSON-object output and genuine grounded prose (not the template), using the user's
+  `GROQ_API_KEY` in root `.env`. Local dev still defaults to Ollama/template to preserve the daily cap.
 - **Phase 5 is done (2026-07-11).** Full endpoint surface wired end to end: `run_full_ingest`
   (enrich → analyze = evidence + written summary → store) on a single-worker queue; `GET
   /api/profiles/{handle}` (discriminated states: not_found 404 / building / needs_more_films /
@@ -87,8 +93,8 @@ The state of the world for whoever (a fresh session, or you) picks this up. Pair
   Full runbook in **`docs/03_DEPLOY.md`** (Groq key → Turso → HF Space secrets → Vercel → CORS →
   cold-start → live smoke test). The actual deploy + `v1.0` tag need the user's accounts — I can't
   create accounts or hold secrets. Docker wasn't available in the build env, so the image is unbuilt
-  locally (it builds on HF's infra). **Still open: Phase 4's one live GroqWriter call** — add
-  `GROQ_API_KEY` to root `.env` and I'll run it.
+  locally (it builds on HF's infra). Phase 4's one live GroqWriter call is now done (2026-07-12) —
+  the only remaining work is the actual provisioning + `v1.0` tag, which needs the user's accounts.
 
 Repo root today:
 
@@ -196,8 +202,8 @@ pass. Commit at each boundary.
 - [x] **Phase 1** — Data model + ingestion (upload real export → enriched films stored) — done 2026-07-11
 - [x] **Phase 2** — Evidence layer (statistics + min-profile gate) — done 2026-07-11
 - [x] **Phase 3** — Ranker (top-8, watched excluded, held-out eval beats random) — done 2026-07-11
-- [~] **Phase 4** — Writer (Ollama + Groq behind one protocol, fallback works) — CODE COMPLETE +
-  82 tests 2026-07-11; **live LLM verification pending a GROQ_API_KEY or local Ollama** (see note)
+- [x] **Phase 4** — Writer (Ollama + Groq behind one protocol, fallback works) — done 2026-07-11;
+  live GroqWriter verified 2026-07-12 (llama-3.3-70b-versatile, real grounded prose)
 - [x] **Phase 5** — API + orchestration + guardrails (e2e upload→recs; rate/capacity states) — done 2026-07-11
 - [x] **Phase 6** — Frontend (two screens, full journey, e2e passes) — done 2026-07-11
 - [x] **Phase 7** — Design pass (cohesive across states/viewports) — done 2026-07-11
