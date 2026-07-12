@@ -23,4 +23,12 @@ describe("RecommendationCard", () => {
     render(<RecommendationCard rec={{ ...sampleRec, at_capacity: true }} />);
     expect(screen.getByText(/AI paused/i)).toBeInTheDocument();
   });
+
+  it("shows the TMDB rating and a working Letterboxd link", () => {
+    render(<RecommendationCard rec={sampleRec} />);
+    expect(screen.getByText(/8\.6/)).toBeInTheDocument();
+    expect(screen.getByText(/TMDB/)).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /Letterboxd/i });
+    expect(link).toHaveAttribute("href", "https://letterboxd.com/tmdb/424/");
+  });
 });

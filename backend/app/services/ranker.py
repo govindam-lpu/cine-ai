@@ -15,6 +15,7 @@ logic and are tested without the network; `recommend` is the IO orchestrator.
 import logging
 import math
 import random
+import threading
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -38,6 +39,17 @@ WEIGHTS = {
     "patience": 0.10,
 }
 
+# Prompt mode: when the user types a request, the request LEADS and taste only personalizes within
+# it. request-fit (embedding + requested-genre overlap) dominates; taste is a light tie-break; the
+# taste-content bonuses (genre/era/obscurity/patience) are OFF — they encode the taste the user is
+# explicitly overriding, and were dragging off-request films (e.g. dramas for "romantic comedy") up.
+PROMPT_W = {"sim": 1.8, "genre": 1.0, "taste": 0.25, "director": 0.2}
+_GENRE_FIT_BASE = 0.44  # a genre counts toward "what you asked for" only above this prompt-similarity
+_STRONG_GENRE = 0.50    # a genre this close to the request counts as "strongly requested"
+# Dark/violent genres: if the request doesn't ask for them, keep them out of the pool — so
+# "a feel-good comedy" can't surface a Comedy-tagged thriller like Parasite.
+DARK_GENRES = ["Horror", "War", "Crime", "Thriller"]
+
 # TMDB movie genre ids (stable list) — discover needs ids, evidence speaks names.
 GENRE_NAME_TO_ID = {
     "Action": 28, "Adventure": 12, "Animation": 16, "Comedy": 35, "Crime": 80,
@@ -55,6 +67,48 @@ MOOD_GENRES = {
     "tense": ["Thriller", "Horror", "Crime", "Mystery"],
 }
 
+# Genre-name embeddings, computed once, for mapping a free-text prompt to TMDB genres in embedding
+# space (no LLM — constraint 2). Lets "something scary and tense" seed discovery with Horror/Thriller.
+_GENRE_EMB: list[tuple[str, np.ndarray]] | None = None
+_GENRE_EMB_LOCK = threading.Lock()
+
+
+def _genre_embeddings() -> list[tuple[str, np.ndarray]]:
+    global _GENRE_EMB
+    if _GENRE_EMB is None:
+        with _GENRE_EMB_LOCK:
+            if _GENRE_EMB is None:
+                names = list(GENRE_NAME_TO_ID.keys())
+                vectors = embed_texts([f"A {name} film" for name in names])
+                _GENRE_EMB = list(zip(names, vectors))
+    return _GENRE_EMB
+
+
+def prompt_genre_scores(prompt_vec: np.ndarray) -> list[tuple[str, float]]:
+    """Every TMDB genre ranked by similarity to the prompt vector (best first)."""
+    return sorted(
+        ((name, float(prompt_vec @ vec)) for name, vec in _genre_embeddings()),
+        key=lambda x: x[1],
+        reverse=True,
+    )
+
+
+def genres_for_prompt(prompt_vec: np.ndarray, top_k: int = 4, threshold: float = 0.42) -> list[str]:
+    """The TMDB genres nearest a prompt vector (best first) — used to seed discovery so the candidate
+    pool actually contains what the user asked for. Empty if nothing clears the bar (then discovery
+    falls back to the evidence seeds, and the prompt still tilts scoring)."""
+    return [name for name, sim in prompt_genre_scores(prompt_vec)[:top_k] if sim >= threshold]
+
+
+def prompt_genre_weights(prompt_vec: np.ndarray, top_k: int = 3) -> dict[str, float]:
+    """Positive 'fit to the request' weight per genre — how much a candidate tagged with it counts
+    as matching what the user asked for. Only genres clearly above the base similarity qualify."""
+    return {
+        name: sim - _GENRE_FIT_BASE
+        for name, sim in prompt_genre_scores(prompt_vec)[:top_k]
+        if sim > _GENRE_FIT_BASE
+    }
+
 
 @dataclass
 class FilmVector:
@@ -70,6 +124,7 @@ class FilmVector:
     crew: dict = field(default_factory=dict)
     overview: str | None = None
     poster_path: str | None = None
+    tmdb_rating: float | None = None
 
 
 @dataclass
@@ -94,6 +149,7 @@ def film_to_vector(film: Film) -> FilmVector:
         crew=film.crew or {},
         overview=film.overview,
         poster_path=film.poster_path,
+        tmdb_rating=film.tmdb_rating,
     )
 
 
@@ -163,17 +219,29 @@ def _clamp(value: float, lo: float = -1.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, value))
 
 
-def score_candidate(cand: FilmVector, taste: np.ndarray, evidence: dict) -> tuple[float, float, list[dict]]:
-    """Score one candidate; return (score, cosine_similarity, fired-signals).
+def score_candidate(
+    cand: FilmVector,
+    taste: np.ndarray,
+    evidence: dict,
+    prompt_vec: np.ndarray | None = None,
+    prompt_text: str | None = None,
+    prompt_genre_wts: dict[str, float] | None = None,
+) -> tuple[float, float, list[dict]]:
+    """Score one candidate; return (score, taste_similarity, fired-signals).
 
     Signals are the structured "why it scored" the writer consumes — each names a concrete fact.
+    Two modes: a free-text request switches on PROMPT MODE (the request leads, taste personalizes);
+    otherwise TASTE MODE (the taste vector leads, evidence tilts).
     """
-    signals: list[dict] = []
+    taste_sim = float(cand.embedding @ taste) if cand.embedding is not None else 0.0
 
-    similarity = float(cand.embedding @ taste) if cand.embedding is not None else 0.0
-    score = WEIGHTS["cosine"] * similarity
+    if prompt_vec is not None and cand.embedding is not None:
+        return _score_prompt_mode(cand, taste_sim, evidence, prompt_vec, prompt_text, prompt_genre_wts or {})
+
+    signals: list[dict] = []
+    score = WEIGHTS["cosine"] * taste_sim
     signals.append(
-        {"factor": "similarity", "strength": round(similarity, 3),
+        {"factor": "similarity", "strength": round(taste_sim, 3),
          "detail": "It sits close to the center of what you rate highly."}
     )
 
@@ -237,7 +305,61 @@ def score_candidate(cand: FilmVector, taste: np.ndarray, evidence: dict) -> tupl
                 signals.append({"factor": "patience", "strength": round(contribution, 3), "detail": phrasing})
 
     signals.sort(key=lambda s: s["strength"], reverse=True)
-    return score, similarity, signals
+    return score, taste_sim, signals
+
+
+def _score_prompt_mode(
+    cand: FilmVector,
+    taste_sim: float,
+    evidence: dict,
+    prompt_vec: np.ndarray,
+    prompt_text: str | None,
+    genre_wts: dict[str, float],
+) -> tuple[float, float, list[dict]]:
+    """The request leads: request-fit (embedding + requested-genre overlap) dominates, taste is a
+    light personalizer, and the taste-content bonuses are off. This is what stops a 'romantic comedy'
+    request from returning the viewer's beloved dramas."""
+    signals: list[dict] = []
+    prompt_sim = float(cand.embedding @ prompt_vec)
+
+    matched = [g for g in (cand.genres or []) if g in genre_wts]
+    genre_fit = sum(genre_wts[g] for g in matched)
+
+    score = (
+        PROMPT_W["sim"] * prompt_sim
+        + PROMPT_W["genre"] * genre_fit
+        + PROMPT_W["taste"] * taste_sim
+    )
+
+    detail = (
+        f'It fits what you asked for: "{prompt_text}".' if prompt_text else "It fits the mood you asked for."
+    )
+    signals.append(
+        {"factor": "prompt", "strength": round(PROMPT_W["sim"] * prompt_sim, 3),
+         "detail": detail, "name": "your request"}
+    )
+    if matched:
+        best = max(matched, key=lambda g: genre_wts[g])
+        signals.append(
+            {"factor": "genre", "strength": round(PROMPT_W["genre"] * genre_fit, 3),
+             "detail": f"It's {best.lower()} — the kind of film you asked for.", "name": best}
+        )
+
+    # Light director personalization — only fires on a director the viewer already rates up, so it
+    # sharpens the pick within the request without pulling in off-request films.
+    dir_deltas = {d["name"]: d["delta"] for d in evidence.get("crew_affinity", {}).get("director", [])}
+    for name in cand.crew.get("director", []) or []:
+        if name in dir_deltas:
+            bonus = PROMPT_W["director"] * _clamp(dir_deltas[name], 0, 1)
+            score += bonus
+            signals.append(
+                {"factor": "director", "strength": round(bonus, 3),
+                 "detail": f"You rate {name}'s films above your average.", "name": name}
+            )
+            break
+
+    signals.sort(key=lambda s: s["strength"], reverse=True)
+    return score, taste_sim, signals
 
 
 def rank_candidates(
@@ -246,6 +368,9 @@ def rank_candidates(
     watched_ids: set[int],
     evidence: dict,
     limit: int = 8,
+    prompt_vec: np.ndarray | None = None,
+    prompt_text: str | None = None,
+    prompt_genre_wts: dict[str, float] | None = None,
 ) -> list[Recommendation]:
     """Score all candidates, exclude watched (hard invariant), return the top `limit`."""
     seen: set[int] = set()
@@ -256,7 +381,9 @@ def rank_candidates(
         if cand.embedding is None:
             continue  # can't place a film we couldn't embed
         seen.add(cand.tmdb_id)
-        score, similarity, signals = score_candidate(cand, taste, evidence)
+        score, similarity, signals = score_candidate(
+            cand, taste, evidence, prompt_vec, prompt_text, prompt_genre_wts
+        )
         ranked.append(
             Recommendation(
                 tmdb_id=cand.tmdb_id, title=cand.title, score=round(score, 4),
@@ -271,16 +398,16 @@ def rank_candidates(
 
 
 def discover_candidate_ids(
-    tmdb: TMDBService, evidence: dict, watched_ids: set[int], mood: str | None = None, target: int = 60
+    tmdb: TMDBService,
+    evidence: dict,
+    watched_ids: set[int],
+    mood: str | None = None,
+    target: int = 60,
+    prompt_genres: list[str] | None = None,
+    and_genres: list[str] | None = None,
 ) -> list[int]:
-    """Pull ~`target` candidate TMDB ids via discover, seeded by the evidence. Widen (relax filters)
-    rather than return too few; watched ids are filtered here too (before scoring)."""
-    seeds = evidence.get("seeds", {})
-    genre_names = list(seeds.get("genres", []))
-    if mood and mood in MOOD_GENRES:
-        genre_names = MOOD_GENRES[mood] + [g for g in genre_names if g not in MOOD_GENRES[mood]]
-    genre_ids = [GENRE_NAME_TO_ID[g] for g in genre_names if g in GENRE_NAME_TO_ID]
-
+    """Pull ~`target` candidate TMDB ids via discover. Widen (relax filters) rather than return too
+    few; watched ids are filtered here too (before scoring)."""
     ids: list[int] = []
     seen: set[int] = set()
 
@@ -299,12 +426,46 @@ def discover_candidate_ids(
             if len(ids) >= target:
                 return
 
+    if mood and mood in MOOD_GENRES:
+        prompt_genres = MOOD_GENRES[mood] + [g for g in (prompt_genres or []) if g not in MOOD_GENRES[mood]]
+
+    # PROMPT MODE: the pool comes from the *requested* genres, not the viewer's taste seeds — so a
+    # "romantic comedy" request can't surface their beloved crime dramas. Tiered so the purest
+    # matches (tagged with BOTH strongly-requested genres) lead, then broaden only as needed.
+    if prompt_genres:
+        pg_ids = [GENRE_NAME_TO_ID[g] for g in prompt_genres if g in GENRE_NAME_TO_ID]
+        and_ids = [GENRE_NAME_TO_ID[g] for g in (and_genres or []) if g in GENRE_NAME_TO_ID]
+        quality = {"sort_by": "vote_average.desc", "vote_count.gte": 120, "include_adult": "false"}
+        # Keep non-narrative content (standup/concert specials, music videos, TV movies) and
+        # un-requested dark genres out of the pool — so "a feel-good comedy" doesn't return a standup
+        # special or a Comedy-tagged thriller. Any genre the user actually asked for is never excluded.
+        exclude = [
+            g for g in (["Documentary", "Music", "TV Movie"] + DARK_GENRES) if g not in prompt_genres
+        ]
+        quality["without_genres"] = ",".join(
+            str(GENRE_NAME_TO_ID[g]) for g in exclude if g in GENRE_NAME_TO_ID
+        )
+        if len(and_ids) >= 2:
+            pull({**quality, "with_genres": f"{and_ids[0]},{and_ids[1]}"}, pages=3)   # AND — purest
+        if len(ids) < target and pg_ids:
+            pull({**quality, "with_genres": "|".join(str(g) for g in pg_ids)}, pages=4)  # OR
+        for gid in pg_ids:
+            if len(ids) >= target:
+                break
+            pull({**quality, "with_genres": str(gid)})
+        if len(ids) < 12:  # genuinely thin (a niche genre) → broaden on quality alone
+            logger.info("ranker: prompt pool thin, broadening on rating")
+            pull({"sort_by": "vote_average.desc", "vote_count.gte": 300, "include_adult": "false"}, pages=2)
+        return ids[:target]
+
+    # TASTE MODE: seed from the evidence's top genres.
+    genre_ids = [GENRE_NAME_TO_ID[g] for g in evidence.get("seeds", {}).get("genres", []) if g in GENRE_NAME_TO_ID]
+
     # Quality, not popularity: vote_average.desc with a real vote floor surfaces well-regarded films
     # in the viewer's genres (foreign/arthouse included). No language hard-filter — it excluded the
     # world cinema an arthouse viewer loves. Similarity + the evidence signals then personalize.
     quality = {"sort_by": "vote_average.desc", "vote_count.gte": 200, "include_adult": "false"}
 
-    # One pull per preferred genre → each preferred genre gets representation in the pool.
     for gid in genre_ids[:4]:
         if len(ids) >= target:
             break
@@ -326,11 +487,43 @@ def recommend(
     evidence: dict,
     tmdb: TMDBService | None = None,
     mood: str | None = None,
+    prompt: str | None = None,
     limit: int = 8,
     candidate_pool: int = 60,
 ) -> list[Recommendation]:
-    """Full pipeline: taste vector from the viewer's films → TMDB candidates → score → top `limit`."""
+    """Full pipeline: taste vector from the viewer's films → TMDB candidates → score → top `limit`.
+
+    A free-text `prompt` (what the user is in the mood for) is embedded locally and used to both seed
+    discovery and tilt scoring — the ranking still happens in Python, the model never decides.
+    """
     tmdb = tmdb or TMDBService()
+
+    # Embed the prompt once (unit-norm, same space as film embeddings). A preset mood word gets its
+    # curated genres; free text derives genres in embedding space. Failure → ignore it, never crash.
+    prompt_text = (prompt or "").strip() or None
+    prompt_vec = None
+    prompt_genres: list[str] | None = None
+    prompt_and: list[str] | None = None
+    prompt_gwts: dict[str, float] | None = None
+    if prompt_text:
+        try:
+            prompt_vec = embed_texts([prompt_text])[0]
+            key = prompt_text.lower()
+            if key in MOOD_GENRES:
+                prompt_genres = MOOD_GENRES[key]
+            else:
+                scores = prompt_genre_scores(prompt_vec)
+                strong = [g for g, s in scores if s >= _STRONG_GENRE]
+                # Discovery pools from the *strongly* requested genres only (or the single best) —
+                # a weak second genre (e.g. Drama at 0.48 for "feel-good comedy") must not widen the
+                # pool back toward the viewer's taste. AND only a clean two-genre request ("romantic
+                # comedy"); 3+ strong genres means a vague prompt, where AND-ing the top two would be
+                # an arbitrary pick (e.g. Thriller+Horror for "psychological thriller").
+                prompt_genres = strong[:3] if strong else [scores[0][0]]
+                prompt_and = strong if len(strong) == 2 else []
+            prompt_gwts = prompt_genre_weights(prompt_vec)
+        except Exception:  # noqa: BLE001
+            prompt_vec, prompt_genres, prompt_and, prompt_gwts = None, None, None, None
 
     rows = (
         db.query(WatchHistory, Film)
@@ -352,7 +545,9 @@ def recommend(
 
     watched_ids = {film.tmdb_id for film in user_films if film.tmdb_id}
 
-    candidate_ids = discover_candidate_ids(tmdb, evidence, watched_ids, mood, candidate_pool)
+    candidate_ids = discover_candidate_ids(
+        tmdb, evidence, watched_ids, mood, candidate_pool, prompt_genres, prompt_and
+    )
     svc = EnrichmentService(tmdb)
     candidate_films: list[Film] = []
     for tid in candidate_ids:
@@ -380,7 +575,9 @@ def recommend(
     ensure_film_embeddings(db, candidate_films)
 
     vectors = [film_to_vector(f) for f in candidate_films if f.tmdb_id not in watched_ids]
-    return rank_candidates(taste, vectors, watched_ids, evidence, limit)
+    return rank_candidates(
+        taste, vectors, watched_ids, evidence, limit, prompt_vec, prompt_text, prompt_gwts
+    )
 
 
 # --- evaluation --------------------------------------------------------------

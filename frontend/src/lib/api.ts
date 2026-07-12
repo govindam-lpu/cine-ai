@@ -90,6 +90,8 @@ export interface Recommendation {
   year: number | null;
   poster_path: string | null;
   overview: string | null;
+  tmdb_rating: number | null;
+  tmdb_vote_count: number | null;
   score: number;
   signals: RecSignal[];
   reason: string;
@@ -142,6 +144,7 @@ export function streamRecommendations(
   handle: string,
   opts: {
     mood?: string;
+    prompt?: string;
     limit?: number;
     onCard: (rec: Recommendation) => void;
     onDone: (count: number) => void;
@@ -151,6 +154,7 @@ export function streamRecommendations(
   const controller = new AbortController();
   const params = new URLSearchParams();
   if (opts.mood) params.set("mood", opts.mood);
+  if (opts.prompt) params.set("q", opts.prompt);
   if (opts.limit) params.set("limit", String(opts.limit));
   const url = `${API_BASE}/api/profiles/${encodeURIComponent(handle)}/recommendations?${params}`;
 
@@ -190,4 +194,10 @@ export function streamRecommendations(
 
 export function posterUrl(path: string | null, size = "w342"): string | null {
   return path ? `https://image.tmdb.org/t/p/${size}${path}` : null;
+}
+
+/** Letterboxd's stable per-film redirect from a TMDB id — resolves in the user's own browser
+ *  (residential IP), so the Cloudflare block that stops server-side scraping never applies. */
+export function letterboxdUrl(tmdbId: number): string {
+  return `https://letterboxd.com/tmdb/${tmdbId}/`;
 }

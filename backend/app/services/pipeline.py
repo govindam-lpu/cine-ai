@@ -96,6 +96,7 @@ def generate_recommendations(
     mood: str | None = None,
     limit: int = 8,
     budget: GenerationBudget | None = None,
+    prompt: str | None = None,
 ):
     """Yield (recommendation, reason, at_capacity) tuples — ranked fresh, reasons written per film.
 
@@ -110,7 +111,7 @@ def generate_recommendations(
     evidence = tp.evidence_json
 
     writer = make_writer()
-    recs = recommend(db, handle, evidence, tmdb=make_tmdb(), mood=mood, limit=limit)
+    recs = recommend(db, handle, evidence, tmdb=make_tmdb(), mood=mood, prompt=prompt, limit=limit)
 
     for rec in recs:
         film = {"title": rec.title, "year": rec.vector.release_year, "overview": rec.vector.overview}

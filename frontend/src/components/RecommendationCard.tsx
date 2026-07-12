@@ -1,5 +1,5 @@
 import type { Recommendation } from "@/lib/api";
-import { posterUrl } from "@/lib/api";
+import { letterboxdUrl, posterUrl } from "@/lib/api";
 
 // The reason IS the card — not a caption under a poster. Numbered like a catalogue entry.
 export default function RecommendationCard({ rec, index }: { rec: Recommendation; index?: number }) {
@@ -40,6 +40,24 @@ export default function RecommendationCard({ rec, index }: { rec: Recommendation
             ))}
           </div>
         ) : null}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-subtle pt-3">
+          {rec.tmdb_rating ? (
+            <span className="font-mono text-[0.7rem] text-text-secondary" title="TMDB community average">
+              ★ {rec.tmdb_rating.toFixed(1)}
+              <span className="text-text-muted"> /10 · TMDB</span>
+            </span>
+          ) : (
+            <span />
+          )}
+          <a
+            href={letterboxdUrl(rec.tmdb_id)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-[0.7rem] uppercase tracking-wide text-accent hover:underline"
+          >
+            View on Letterboxd ↗
+          </a>
+        </div>
         {rec.at_capacity ? (
           <p className="font-mono text-[0.65rem] text-warning">written from your signals · AI paused</p>
         ) : null}

@@ -10,7 +10,7 @@ import {
   type ProfileResponse,
   type Recommendation,
 } from "@/lib/api";
-import MoodSelector from "@/components/MoodSelector";
+import MoodPrompt from "@/components/MoodPrompt";
 import RecommendationCard from "@/components/RecommendationCard";
 import TasteDNACard from "@/components/TasteDNACard";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
@@ -30,7 +30,7 @@ export default function ProfileClient({ handle }: { handle: string }) {
   const [recs, setRecs] = useState<Recommendation[]>([]);
   const [recDone, setRecDone] = useState(false);
   const [recError, setRecError] = useState<string | null>(null);
-  const [mood, setMood] = useState("");
+  const [query, setQuery] = useState("");
   const [rerollKey, setRerollKey] = useState(0);
   const [copied, setCopied] = useState(false);
 
@@ -60,7 +60,7 @@ export default function ProfileClient({ handle }: { handle: string }) {
     };
   }, [handle]);
 
-  // Stream recommendations once ready; re-stream on mood change or re-roll. The `active` flag makes
+  // Stream recommendations once ready; re-stream on a new prompt or re-roll. The `active` flag makes
   // it StrictMode-safe: an aborted stream's late callbacks are ignored, so a re-invoked effect
   // can't interleave or drop cards.
   useEffect(() => {
@@ -70,7 +70,7 @@ export default function ProfileClient({ handle }: { handle: string }) {
     setRecDone(false);
     setRecError(null);
     const abort = streamRecommendations(handle, {
-      mood: mood || undefined,
+      prompt: query || undefined,
       onCard: (r) =>
         active &&
         setRecs((prev) => (prev.some((x) => x.tmdb_id === r.tmdb_id) ? prev : [...prev, r])),
@@ -81,7 +81,7 @@ export default function ProfileClient({ handle }: { handle: string }) {
       active = false;
       abort();
     };
-  }, [profile?.status, handle, mood, rerollKey]);
+  }, [profile?.status, handle, query, rerollKey]);
 
   const share = useCallback(() => {
     // Copying is best-effort (blocked in some contexts); the shareable URL is already the address bar.
@@ -182,7 +182,7 @@ export default function ProfileClient({ handle }: { handle: string }) {
             Re-roll
           </button>
         </div>
-        <MoodSelector value={mood} onChange={setMood} />
+        <MoodPrompt value={query} onSubmit={setQuery} />
 
         {recError && recs.length === 0 ? (
           <ErrorState title="Couldn't load recommendations" message={recError} onRetry={() => setRerollKey((k) => k + 1)} />

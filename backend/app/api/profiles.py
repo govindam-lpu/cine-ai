@@ -252,6 +252,8 @@ def _rec_payload(rec, reason: str, at_capacity: bool) -> dict:
         "year": v.release_year,
         "poster_path": v.poster_path,
         "overview": v.overview,
+        "tmdb_rating": v.tmdb_rating,          # TMDB's vote_average (/10) — the honest, available number
+        "tmdb_vote_count": v.vote_count,       # Letterboxd's own average isn't fetchable (no API; no scrape)
         "score": rec.score,
         "signals": rec.signals,
         "reason": reason,
@@ -261,12 +263,13 @@ def _rec_payload(rec, reason: str, at_capacity: bool) -> dict:
 
 @router.get("/{handle}/recommendations", response_model=None)
 def get_recommendations(
-    handle: str, request: Request, mood: str | None = None, limit: int = 8
+    handle: str, request: Request, mood: str | None = None, q: str | None = None, limit: int = 8
 ) -> StreamingResponse | JSONResponse:
     if not rec_limiter_ip.allow(_client_ip(request)):
         raise _too_many("Too many requests from your network. Try again shortly.")
 
     limit = max(1, min(limit, 12))
+    prompt = (q or "").strip()[:200] or None   # free-text "what are you in the mood for"; length-capped
 
     # Gate on readiness before opening a stream, so callers get a clear state, not an empty stream.
     db = SessionLocal()
@@ -291,7 +294,9 @@ def get_recommendations(
         stream_db = SessionLocal()
         count = 0
         try:
-            for rec, reason, at_capacity in generate_recommendations(stream_db, handle, mood, limit, budget):
+            for rec, reason, at_capacity in generate_recommendations(
+                stream_db, handle, mood, limit, budget, prompt
+            ):
                 count += 1
                 yield f"data: {json.dumps(_rec_payload(rec, reason, at_capacity))}\n\n"
         finally:

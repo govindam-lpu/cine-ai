@@ -31,6 +31,8 @@ export const sampleRec: Recommendation = {
   year: 1993,
   poster_path: "/abc.jpg",
   overview: "A German industrialist saves lives during the Holocaust.",
+  tmdb_rating: 8.6,
+  tmdb_vote_count: 15234,
   score: 0.47,
   signals: [
     { factor: "similarity", strength: 0.28, detail: "It sits close to the center of what you rate highly." },
