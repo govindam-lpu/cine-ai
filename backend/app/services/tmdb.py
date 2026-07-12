@@ -41,6 +41,9 @@ def _build_session(bearer_token: str) -> requests.Session:
     return session
 
 
+_KEYWORD_ID_CACHE: dict[str, int | None] = {}
+
+
 class TMDBService:
     def __init__(self) -> None:
         self.api_key = settings.tmdb_api_key
@@ -88,6 +91,25 @@ class TMDBService:
 
     def discover_movies(self, params: dict) -> dict:
         return self._get("/discover/movie", params)
+
+    def search_keyword_ids(self, phrases: list[str]) -> list[int]:
+        """Resolve theme phrases (e.g. 'feel-good') to TMDB keyword ids for discover's with_keywords.
+        Cached process-wide — keyword ids are stable. Unresolvable phrases are skipped, not fatal."""
+        ids: list[int] = []
+        for phrase in phrases:
+            key = (phrase or "").strip().lower()
+            if not key:
+                continue
+            if key not in _KEYWORD_ID_CACHE:
+                try:
+                    results = self._get("/search/keyword", {"query": key}).get("results", [])
+                    _KEYWORD_ID_CACHE[key] = results[0]["id"] if results else None
+                except Exception:  # noqa: BLE001
+                    _KEYWORD_ID_CACHE[key] = None
+            kid = _KEYWORD_ID_CACHE[key]
+            if kid is not None:
+                ids.append(kid)
+        return ids
 
     @staticmethod
     def _pick_best(results: list[dict], title: str, year: int | None) -> dict | None:

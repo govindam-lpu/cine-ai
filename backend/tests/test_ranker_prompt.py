@@ -64,3 +64,53 @@ def test_prompt_beats_taste_the_original_bug():
     )
     assert recs[0].tmdb_id == 2                                          # request wins over taste
     assert recs[0].signals[0]["factor"] in ("prompt", "genre")          # and it says why (not taste)
+
+
+def test_recommend_with_intent_excludes_standup_and_keeps_comedies():
+    """Intent-driven search: exclude_terms drops a standup special even though it's Comedy-tagged and
+    high-rated, and the real comedies survive — the 'good movies, not bad ones' guarantee."""
+    from app.db.session import SessionLocal
+    from app.models.entities import Film, Profile, WatchHistory
+    from app.services.ranker import ensure_film_embeddings, recommend
+    from tests.helpers import FakeTMDB
+
+    evidence = {
+        "baseline_rating": 3.8, "seeds": {"genres": ["Drama"]},
+        "genre_affinity": [], "era_affinity": [], "crew_affinity": {"director": []},
+        "obscurity_preference": {"value": None}, "patience": {"value": None},
+    }
+
+    db = SessionLocal()
+    try:
+        db.add(Profile(handle="pi"))
+        rated = [Film(tmdb_id=300 + i, media_type="film", title=f"R{i}",
+                      overview=f"a serious drama number {i}", genres=["Drama"]) for i in range(3)]
+        db.add_all(rated)
+        db.commit()
+        for f in rated:
+            db.refresh(f)
+        for rating, f in zip([5.0, 4.0, 2.0], rated):
+            db.add(WatchHistory(profile_handle="pi", film_id=f.id, user_rating=rating))
+        db.commit()
+        ensure_film_embeddings(db, rated)
+
+        details = {
+            2001: {"id": 2001, "title": "Good Comedy", "genres": [{"name": "Comedy"}],
+                   "overview": "a warm feel-good comedy about old friends reuniting",
+                   "vote_average": 7.8, "vote_count": 500},
+            2002: {"id": 2002, "title": "Sweet Romcom", "genres": [{"name": "Comedy"}, {"name": "Romance"}],
+                   "overview": "a charming romantic comedy set in Rome", "vote_average": 7.5, "vote_count": 400},
+            2003: {"id": 2003, "title": "Live Special", "genres": [{"name": "Comedy"}],
+                   "overview": "the comedian performs a stand-up set recorded live on stage",
+                   "vote_average": 8.6, "vote_count": 300},
+        }
+        tmdb = FakeTMDB(matches={}, details=details, discover=[{"id": 2001}, {"id": 2002}, {"id": 2003}])
+        intent = {"genres": ["Comedy"], "exclude_genres": ["Horror"], "keywords": [],
+                  "exclude_terms": ["stand-up"], "min_rating": None, "query": "a warm feel-good comedy"}
+
+        recs = recommend(db, "pi", evidence, tmdb=tmdb, prompt="feel good comedy", intent=intent, limit=8)
+        titles = {r.title for r in recs}
+        assert "Live Special" not in titles          # standup dropped despite an 8.6 rating + Comedy tag
+        assert {"Good Comedy", "Sweet Romcom"} <= titles
+    finally:
+        db.close()

@@ -130,6 +130,9 @@ class FakeTMDB:
         # All candidates come back on page 1; later pages are empty.
         return {"results": self.discover if params.get("page", 1) == 1 else []}
 
+    def search_keyword_ids(self, phrases: list[str]) -> list[int]:
+        return []  # no keyword resolution in tests
+
 
 _GENRES = ["Drama", "Science Fiction", "Thriller", "Comedy", "Romance", "War", "Crime", "History"]
 

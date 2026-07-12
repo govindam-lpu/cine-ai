@@ -43,6 +43,19 @@ class SummaryOut(BaseModel):
     summary: str = Field(min_length=15, max_length=1500)
 
 
+class SearchIntentOut(BaseModel):
+    """Structured filters parsed from a free-text search request. The model fills these; Python
+    executes them. The model never sees or ranks films."""
+
+    genres: list[str] = Field(default_factory=list)
+    exclude_genres: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
+    exclude_terms: list[str] = Field(default_factory=list)
+    era: str | None = None
+    min_rating: float | None = None
+    query: str = ""
+
+
 @runtime_checkable
 class Writer(Protocol):
     def write_taste_summary(self, evidence: dict) -> str: ...
@@ -165,9 +178,10 @@ class _LLMWriter:
     def _complete(self, system: str, user: str, max_tokens: int) -> str:  # pragma: no cover - abstract
         raise NotImplementedError
 
-    def _generate(self, system: str, user: str, model_cls, key: str, max_tokens: int) -> str | None:
+    def _generate_model(self, system: str, user: str, model_cls, max_tokens: int):
+        """Return a validated model instance, or None if the backend/JSON was unusable."""
         if settings.e2e_mode:
-            return None  # offline e2e → straight to the template, no network round-trip
+            return None  # offline e2e → straight to the template/fallback, no network round-trip
         for _ in range(2):  # initial attempt + one retry
             try:
                 raw = self._complete(system, user, max_tokens)
@@ -176,11 +190,22 @@ class _LLMWriter:
             except Exception:  # transient HTTP/5xx/timeout → retry, then fall back
                 continue
             try:
-                payload = json.loads(raw)
-                return getattr(model_cls(**payload), key)
+                return model_cls(**json.loads(raw))
             except (json.JSONDecodeError, ValidationError, TypeError):
                 continue
-        return None  # both attempts produced unusable output → caller uses the template
+        return None
+
+    def _generate(self, system: str, user: str, model_cls, key: str, max_tokens: int) -> str | None:
+        model = self._generate_model(system, user, model_cls, max_tokens)
+        return getattr(model, key) if model is not None else None
+
+    def parse_search_intent(self, prompt: str, allowed_genres: list[str]) -> dict | None:
+        """Translate a free-text search request into structured filters. Language work, not ranking:
+        the model reads the request and emits filters; the ranker executes them and picks the films."""
+        system = _load_prompt("search_intent.md")
+        user = json.dumps({"request": prompt, "allowed_genres": allowed_genres}, ensure_ascii=False)
+        model = self._generate_model(system, user, SearchIntentOut, max_tokens=320)
+        return model.model_dump() if model is not None else None
 
     def write_taste_summary(self, evidence: dict) -> str:
         system = _load_prompt("taste_summary.md")
@@ -256,3 +281,26 @@ def get_writer() -> Writer:
     if settings.writer_backend == "groq":
         return GroqWriter()
     return OllamaWriter()
+
+
+_intent_cache: dict[str, dict | None] = {}
+
+
+def parse_search_intent(prompt: str, allowed_genres: list[str], writer=None) -> dict | None:
+    """Parse a search request into filters (cached per prompt). Returns None on any failure — the
+    ranker then falls back to its embedding-only search plan, so search never breaks on an LLM hiccup.
+    """
+    key = prompt.strip().lower()
+    if key in _intent_cache:
+        return _intent_cache[key]
+
+    intent: dict | None = None
+    try:
+        intent = (writer or get_writer()).parse_search_intent(prompt, allowed_genres)
+    except (WriterRateLimited, WriterUnavailable):
+        intent = None
+
+    if intent and not (intent.get("genres") or intent.get("query")):
+        intent = None  # empty parse is useless → let the ranker fall back
+    _intent_cache[key] = intent
+    return intent

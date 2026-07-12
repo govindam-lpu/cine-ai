@@ -22,6 +22,7 @@ from app.services.writer import (
     WriterRateLimited,
     WriterUnavailable,
     get_writer,
+    parse_search_intent,
     template_reason,
     template_summary,
 )
@@ -111,7 +112,18 @@ def generate_recommendations(
     evidence = tp.evidence_json
 
     writer = make_writer()
-    recs = recommend(db, handle, evidence, tmdb=make_tmdb(), mood=mood, prompt=prompt, limit=limit)
+
+    # Parse the free-text request into structured filters (LLM as query-parser; it never ranks or
+    # sees films). Cached per prompt, and None on any failure so the ranker falls back gracefully.
+    intent = None
+    if prompt:
+        from app.services.ranker import GENRE_NAME_TO_ID
+
+        intent = parse_search_intent(prompt, list(GENRE_NAME_TO_ID))
+
+    recs = recommend(
+        db, handle, evidence, tmdb=make_tmdb(), mood=mood, prompt=prompt, intent=intent, limit=limit
+    )
 
     for rec in recs:
         film = {"title": rec.title, "year": rec.vector.release_year, "overview": rec.vector.overview}

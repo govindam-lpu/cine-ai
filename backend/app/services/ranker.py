@@ -43,7 +43,8 @@ WEIGHTS = {
 # it. request-fit (embedding + requested-genre overlap) dominates; taste is a light tie-break; the
 # taste-content bonuses (genre/era/obscurity/patience) are OFF — they encode the taste the user is
 # explicitly overriding, and were dragging off-request films (e.g. dramas for "romantic comedy") up.
-PROMPT_W = {"sim": 1.8, "genre": 1.0, "taste": 0.25, "director": 0.2}
+PROMPT_W = {"sim": 1.8, "genre": 1.0, "taste": 0.25, "director": 0.2, "quality": 0.35}
+_PROMPT_MIN_RATING = 6.0  # floor for the request pool, so search never returns poorly-rated films
 _GENRE_FIT_BASE = 0.44  # a genre counts toward "what you asked for" only above this prompt-similarity
 _STRONG_GENRE = 0.50    # a genre this close to the request counts as "strongly requested"
 # Dark/violent genres: if the request doesn't ask for them, keep them out of the pool — so
@@ -330,6 +331,9 @@ def _score_prompt_mode(
         + PROMPT_W["genre"] * genre_fit
         + PROMPT_W["taste"] * taste_sim
     )
+    # Quality nudge — prefer well-regarded films within the request (recommendations should be good).
+    if cand.tmdb_rating is not None:
+        score += PROMPT_W["quality"] * _clamp((cand.tmdb_rating - 6.5) / 2.0)
 
     detail = (
         f'It fits what you asked for: "{prompt_text}".' if prompt_text else "It fits the mood you asked for."
@@ -405,6 +409,9 @@ def discover_candidate_ids(
     target: int = 60,
     prompt_genres: list[str] | None = None,
     and_genres: list[str] | None = None,
+    exclude_genres: list[str] | None = None,
+    keyword_ids: list[int] | None = None,
+    min_rating: float | None = None,
 ) -> list[int]:
     """Pull ~`target` candidate TMDB ids via discover. Widen (relax filters) rather than return too
     few; watched ids are filtered here too (before scoring)."""
@@ -435,16 +442,24 @@ def discover_candidate_ids(
     if prompt_genres:
         pg_ids = [GENRE_NAME_TO_ID[g] for g in prompt_genres if g in GENRE_NAME_TO_ID]
         and_ids = [GENRE_NAME_TO_ID[g] for g in (and_genres or []) if g in GENRE_NAME_TO_ID]
-        quality = {"sort_by": "vote_average.desc", "vote_count.gte": 120, "include_adult": "false"}
-        # Keep non-narrative content (standup/concert specials, music videos, TV movies) and
-        # un-requested dark genres out of the pool — so "a feel-good comedy" doesn't return a standup
-        # special or a Comedy-tagged thriller. Any genre the user actually asked for is never excluded.
-        exclude = [
-            g for g in (["Documentary", "Music", "TV Movie"] + DARK_GENRES) if g not in prompt_genres
-        ]
-        quality["without_genres"] = ",".join(
-            str(GENRE_NAME_TO_ID[g]) for g in exclude if g in GENRE_NAME_TO_ID
-        )
+        quality = {
+            "sort_by": "vote_average.desc", "vote_count.gte": 120, "include_adult": "false",
+            "vote_average.gte": max(_PROMPT_MIN_RATING, min_rating or 0),  # never surface bad films
+        }
+        # Keep non-narrative content (standup/concert specials, music videos, TV movies) and the
+        # genres the request rules out (from the parsed intent, or the DARK_GENRES fallback) out of
+        # the pool. A genre the user actually asked for is never excluded.
+        non_narrative = ["Documentary", "Music", "TV Movie"]
+        excl = {
+            GENRE_NAME_TO_ID[g]
+            for g in (non_narrative + list(exclude_genres or []))
+            if g in GENRE_NAME_TO_ID and g not in prompt_genres
+        }
+        if excl:
+            quality["without_genres"] = ",".join(str(i) for i in sorted(excl))
+        # Precision first: films tagged with the requested theme keywords (feel-good, heist, …) lead.
+        if keyword_ids:
+            pull({**quality, "with_keywords": "|".join(str(k) for k in keyword_ids)}, pages=2)
         if len(and_ids) >= 2:
             pull({**quality, "with_genres": f"{and_ids[0]},{and_ids[1]}"}, pages=3)   # AND — purest
         if len(ids) < target and pg_ids:
@@ -481,6 +496,55 @@ def discover_candidate_ids(
     return ids[:target]
 
 
+def _film_hits_terms(film: Film, terms: list[str]) -> bool:
+    """True if any excluded term appears in the film's own description — the reliable filter for
+    non-narrative/off-tone content (standup, concert, tragedy) that genre tags miss."""
+    hay = ((film.overview or "") + " " + " ".join(film.keywords or [])).lower()
+    return any(term in hay for term in terms)
+
+
+def _build_search_plan(prompt_text: str, intent: dict | None, tmdb: TMDBService) -> dict | None:
+    """Turn a request into an executable search plan: a vector to rank by, the genres to pull and to
+    exclude, theme-keyword ids, and terms to filter out. From the parsed LLM intent when present,
+    else derived from the embedding alone (fallback). Never raises — None means 'rank by taste'."""
+    try:
+        if intent:
+            query = (intent.get("query") or prompt_text).strip() or prompt_text
+            genres = [g for g in intent.get("genres", []) if g in GENRE_NAME_TO_ID][:3]
+            exclude_genres = [g for g in intent.get("exclude_genres", []) if g in GENRE_NAME_TO_ID]
+            exclude_terms = [t.strip().lower() for t in intent.get("exclude_terms", []) if t and t.strip()]
+            keyword_ids = tmdb.search_keyword_ids(list(intent.get("keywords", []))[:4])
+            min_rating = intent.get("min_rating")
+        else:
+            query = prompt_text
+            key = prompt_text.lower()
+            if key in MOOD_GENRES:
+                genres = list(MOOD_GENRES[key])
+            else:
+                scores = prompt_genre_scores(embed_texts([prompt_text])[0])
+                strong = [g for g, s in scores if s >= _STRONG_GENRE]
+                genres = strong[:3] if strong else [scores[0][0]]
+            exclude_genres = [g for g in DARK_GENRES if g not in genres]
+            exclude_terms = ["stand-up", "concert", "live performance"]
+            keyword_ids = []
+            min_rating = None
+
+        prompt_vec = embed_texts([query])[0]
+        return {
+            "vec": prompt_vec,
+            "text": prompt_text,                       # the user's own words, for the "why" signal
+            "genres": genres,
+            "and_genres": genres if len(genres) == 2 else [],
+            "exclude_genres": exclude_genres,
+            "keyword_ids": keyword_ids,
+            "exclude_terms": exclude_terms,
+            "min_rating": min_rating,
+            "gwts": prompt_genre_weights(prompt_vec),
+        }
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def recommend(
     db: Session,
     handle: str,
@@ -488,6 +552,7 @@ def recommend(
     tmdb: TMDBService | None = None,
     mood: str | None = None,
     prompt: str | None = None,
+    intent: dict | None = None,
     limit: int = 8,
     candidate_pool: int = 60,
 ) -> list[Recommendation]:
@@ -498,32 +563,10 @@ def recommend(
     """
     tmdb = tmdb or TMDBService()
 
-    # Embed the prompt once (unit-norm, same space as film embeddings). A preset mood word gets its
-    # curated genres; free text derives genres in embedding space. Failure → ignore it, never crash.
+    # Build the search plan from the parsed intent (LLM) when present, else from the embedding alone.
+    # The LLM only translates the request; this plan and everything below it is pure Python.
     prompt_text = (prompt or "").strip() or None
-    prompt_vec = None
-    prompt_genres: list[str] | None = None
-    prompt_and: list[str] | None = None
-    prompt_gwts: dict[str, float] | None = None
-    if prompt_text:
-        try:
-            prompt_vec = embed_texts([prompt_text])[0]
-            key = prompt_text.lower()
-            if key in MOOD_GENRES:
-                prompt_genres = MOOD_GENRES[key]
-            else:
-                scores = prompt_genre_scores(prompt_vec)
-                strong = [g for g, s in scores if s >= _STRONG_GENRE]
-                # Discovery pools from the *strongly* requested genres only (or the single best) —
-                # a weak second genre (e.g. Drama at 0.48 for "feel-good comedy") must not widen the
-                # pool back toward the viewer's taste. AND only a clean two-genre request ("romantic
-                # comedy"); 3+ strong genres means a vague prompt, where AND-ing the top two would be
-                # an arbitrary pick (e.g. Thriller+Horror for "psychological thriller").
-                prompt_genres = strong[:3] if strong else [scores[0][0]]
-                prompt_and = strong if len(strong) == 2 else []
-            prompt_gwts = prompt_genre_weights(prompt_vec)
-        except Exception:  # noqa: BLE001
-            prompt_vec, prompt_genres, prompt_and, prompt_gwts = None, None, None, None
+    plan = _build_search_plan(prompt_text, intent, tmdb) if prompt_text else None
 
     rows = (
         db.query(WatchHistory, Film)
@@ -545,15 +588,29 @@ def recommend(
 
     watched_ids = {film.tmdb_id for film in user_films if film.tmdb_id}
 
-    candidate_ids = discover_candidate_ids(
-        tmdb, evidence, watched_ids, mood, candidate_pool, prompt_genres, prompt_and
-    )
+    if plan:
+        candidate_ids = discover_candidate_ids(
+            tmdb, evidence, watched_ids, mood, candidate_pool,
+            prompt_genres=plan["genres"], and_genres=plan["and_genres"],
+            exclude_genres=plan["exclude_genres"], keyword_ids=plan["keyword_ids"],
+            min_rating=plan["min_rating"],
+        )
+    else:
+        candidate_ids = discover_candidate_ids(tmdb, evidence, watched_ids, mood, candidate_pool)
     svc = EnrichmentService(tmdb)
     candidate_films: list[Film] = []
     for tid in candidate_ids:
         film = svc.get_or_create_by_tmdb_id(db, tid)
         if film:
             candidate_films.append(film)
+
+    # Drop films whose own description carries an excluded term (standup/concert/tragedy) — the
+    # reliable removal of non-narrative/off-tone content that TMDB genre tags leave in.
+    if plan and plan["exclude_terms"]:
+        kept = [f for f in candidate_films if not _film_hits_terms(f, plan["exclude_terms"])]
+        if len(kept) < len(candidate_films):
+            logger.info("ranker: excluded %d films on terms", len(candidate_films) - len(kept))
+        candidate_films = kept
 
     # Resilience: if discovery came back thin (niche taste, or TMDB unavailable), supplement from
     # already-enriched, unwatched films in the cache rather than returning fewer than asked.
@@ -575,9 +632,11 @@ def recommend(
     ensure_film_embeddings(db, candidate_films)
 
     vectors = [film_to_vector(f) for f in candidate_films if f.tmdb_id not in watched_ids]
-    return rank_candidates(
-        taste, vectors, watched_ids, evidence, limit, prompt_vec, prompt_text, prompt_gwts
-    )
+    if plan:
+        return rank_candidates(
+            taste, vectors, watched_ids, evidence, limit, plan["vec"], plan["text"], plan["gwts"]
+        )
+    return rank_candidates(taste, vectors, watched_ids, evidence, limit)
 
 
 # --- evaluation --------------------------------------------------------------
