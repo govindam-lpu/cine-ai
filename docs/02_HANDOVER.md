@@ -7,6 +7,29 @@ The state of the world for whoever (a fresh session, or you) picks this up. Pair
 
 ## Where things stand right now
 
+> **Most recent (2026-07-12): free-text search overhaul — and the code is now on GitHub.**
+> Two features shipped on top of the completed v1 build, then the whole repo was pushed to
+> **https://github.com/govindam-lpu/cine-ai** (branch `main`):
+>
+> - **Taste-aware free-text prompt + richer rec cards** (`b23e88f`). The recommendations screen takes
+>   a free-text mood/prompt (e.g. "something funny and heartfelt") instead of only fixed moods, and
+>   each card now shows the film's TMDB rating and a Letterboxd link. Frontend + backend.
+> - **LLM query-parser for search** (`33d1d92`). Free-text search now runs through a bounded LLM
+>   query-parser — `parse_search_intent` in `app/services/writer.py`, prompt in
+>   `app/prompts/search_intent.md`. It translates the request into structured TMDB filters (genres,
+>   exclude_genres, theme keywords, exclude_terms, min_rating, normalized query); Python still does
+>   **100% of discovery, ranking, and selection.** The model reads the request and never sees or ranks
+>   a film, so the "LLM never decides" constraint holds as query translation. Ranker **prompt mode**
+>   executes the plan: pools from the requested genres, excludes ruled-out + non-narrative genres,
+>   floors `vote_average` (>=6.0, or the parsed `min_rating`), drops candidates whose own description
+>   carries an excluded term (stand-up/concert), and adds a quality term so well-rated films rank up.
+>   Falls back to the embedding-only plan when the LLM is unavailable — search never breaks. Verified
+>   on a real 717-film profile: all picks now rate >=7.0.
+>   **Local reminder:** this needs `WRITER_BACKEND=groq` in root `.env` to exercise the LLM path
+>   (default `ollama` degrades to the embedding-only fallback). Production is already `groq`.
+>
+> Test counts now: **101 backend pytest**, **11 frontend vitest** + the Playwright journey — all green.
+
 - **Planning is done.** Architecture, constraints, and product shape are decided and recorded in
   `docs/PLAN.md`. There are **no open architecture questions.**
 - **The old build is archived, intact, under `archive/`.** Nothing at the repo root runs yet — the
@@ -208,7 +231,8 @@ pass. Commit at each boundary.
 - [x] **Phase 6** — Frontend (two screens, full journey, e2e passes) — done 2026-07-11
 - [x] **Phase 7** — Design pass (cohesive across states/viewports) — done 2026-07-11
 - [~] **Phase 8** — Deploy (Vercel + HF Space + Turso + Groq; live, free, working) — ARTIFACTS
-  READY 2026-07-11; live deploy pending the user's platform accounts (see docs/03_DEPLOY.md)
+  READY 2026-07-11; **code pushed to GitHub `main` 2026-07-12**; live deploy still pending the user's
+  platform accounts (see docs/03_DEPLOY.md)
 
 ---
 
